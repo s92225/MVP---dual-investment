@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Dark silver bars">
+  <rect width="1600" height="900" fill="#000000"/>
+  <g opacity="0.9">
+    <path d="M0 610 390 430 1600 470 1600 900 0 900Z" fill="#080808"/>
+    <path d="M150 630 470 500 760 620 440 765Z" fill="#d7d7d7"/>
+    <path d="M470 500 940 518 1210 638 760 620Z" fill="#f2f2f2"/>
+    <path d="M760 620 1210 638 900 790 440 765Z" fill="#9a9a9a"/>
+    <path d="M610 410 925 305 1180 412 862 535Z" fill="#cfcfcf"/>
+    <path d="M925 305 1320 322 1545 424 1180 412Z" fill="#f5f5f5"/>
+    <path d="M1180 412 1545 424 1248 560 862 535Z" fill="#8f8f8f"/>
+    <path d="M-80 468 260 340 560 462 214 602Z" fill="#bfbfbf"/>
+    <path d="M260 340 654 356 912 470 560 462Z" fill="#f0f0f0"/>
+    <path d="M560 462 912 470 594 615 214 602Z" fill="#8a8a8a"/>
+  </g>
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.42" stroke-width="2">
+    <path d="M150 630 470 500 940 518 1210 638 900 790 440 765Z"/>
+    <path d="M610 410 925 305 1320 322 1545 424 1248 560 862 535Z"/>
+    <path d="M-80 468 260 340 654 356 912 470 594 615 214 602Z"/>
+  </g>
+  <g opacity="0.16" fill="#ffffff">
+    <rect x="0" y="0" width="1600" height="2"/>
+    <rect x="0" y="180" width="1600" height="1"/>
+    <rect x="0" y="360" width="1600" height="1"/>
+    <rect x="0" y="540" width="1600" height="1"/>
+    <rect x="0" y="720" width="1600" height="1"/>
+  </g>
+</svg>
