@@ -1228,14 +1228,6 @@ select:focus {
   margin-top: 0;
 }
 
-.silver-pulse-page .topbar .spot-header,
-.silver-pulse-page .topbar.has-spot .spot-header {
-  max-width: 310px;
-  padding: 0 14px;
-  opacity: 1;
-  transform: translateX(0) scale(1);
-}
-
 .pulse-hero {
   min-height: 300px;
   background:
@@ -1353,31 +1345,33 @@ select:focus {
 
 .pulse-choice-up {
   background:
-    linear-gradient(135deg, rgba(95, 214, 154, 0.24), transparent 58%),
-    var(--surface-elevated);
+    linear-gradient(135deg, rgba(0, 193, 118, 0.52), rgba(0, 124, 83, 0.34) 58%),
+    #10221d;
+  border-color: rgba(0, 193, 118, 0.34);
 }
 
 .pulse-choice-up.is-selected,
 .pulse-choice-up:hover:not(:disabled),
 .pulse-choice-up:focus-visible:not(:disabled) {
-  box-shadow: inset 0 0 0 1px rgba(95, 214, 154, 0.58), rgba(95, 214, 154, 0.16) 0 20px 40px -24px;
+  box-shadow: inset 0 0 0 1px rgba(0, 193, 118, 0.72), rgba(0, 193, 118, 0.2) 0 20px 40px -24px;
 }
 
 .pulse-choice-down {
   background:
-    linear-gradient(135deg, rgba(255, 117, 117, 0.22), transparent 58%),
-    var(--surface-elevated);
+    linear-gradient(135deg, rgba(255, 59, 79, 0.52), rgba(139, 38, 49, 0.34) 58%),
+    #271418;
+  border-color: rgba(255, 59, 79, 0.34);
 }
 
 .pulse-choice-down.is-selected,
 .pulse-choice-down:hover:not(:disabled),
 .pulse-choice-down:focus-visible:not(:disabled) {
-  box-shadow: inset 0 0 0 1px rgba(255, 117, 117, 0.58), rgba(255, 117, 117, 0.14) 0 20px 40px -24px;
+  box-shadow: inset 0 0 0 1px rgba(255, 59, 79, 0.72), rgba(255, 59, 79, 0.18) 0 20px 40px -24px;
 }
 
 .pulse-choice:disabled {
   cursor: not-allowed;
-  opacity: 0.58;
+  opacity: 0.82;
 }
 
 .pulse-status-line {
@@ -1409,11 +1403,11 @@ select:focus {
 }
 
 .sentiment-up {
-  background: #5fd69a;
+  background: #00c176;
 }
 
 .sentiment-down {
-  background: #ff7575;
+  background: #ff3b4f;
 }
 
 .sentiment-labels {
@@ -1425,6 +1419,7 @@ select:focus {
 }
 
 .monthly-chart {
+  position: relative;
   display: grid;
   gap: 12px;
   padding: 16px 16px 8px;
@@ -1458,11 +1453,11 @@ select:focus {
 }
 
 .monthly-chart-header .is-up {
-  color: #5fd69a;
+  color: #00c176;
 }
 
 .monthly-chart-header .is-down {
-  color: #ff7575;
+  color: #ff3b4f;
 }
 
 .monthly-chart svg {
@@ -1498,6 +1493,60 @@ select:focus {
   fill: #67c7ff;
   stroke: var(--color-ink);
   stroke-width: 2;
+}
+
+.monthly-hover-layer {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.monthly-chart.is-hovering .monthly-hover-layer {
+  opacity: 1;
+}
+
+.monthly-crosshair {
+  stroke: rgba(255, 255, 255, 0.38);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+
+.monthly-hover-dot {
+  fill: #00a3ff;
+  stroke: var(--color-ink);
+  stroke-width: 2;
+}
+
+.monthly-chart-tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  gap: 2px;
+  min-width: 112px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(8, 10, 13, 0.92);
+  box-shadow: rgba(0, 0, 0, 0.34) 0 14px 24px -16px;
+  color: var(--color-ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  transition: opacity 120ms ease;
+}
+
+.monthly-chart.is-hovering .monthly-chart-tooltip {
+  opacity: 1;
+}
+
+.monthly-chart-tooltip span {
+  color: var(--color-light-steel);
+  font-size: 12px;
+}
+
+.monthly-chart-tooltip strong {
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .monthly-tag,
@@ -1708,7 +1757,7 @@ select:focus {
 }
 
 @media (max-width: 760px) {
-  .silver-pulse-page .topbar .spot-header {
+  .silver-pulse-page .topbar.has-spot .spot-header {
     max-width: 118px;
     padding: 0 10px;
   }

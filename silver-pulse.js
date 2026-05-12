@@ -45,6 +45,7 @@ const SAMPLE_WALLETS = [
   "0xe0f1c848a911d73bb06edc91c5d7f4200de00021",
   "0xf38d10be52a4c0f713d69bc177e02a91ace00022"
 ];
+// Seeded MVP chart series; replace with historical silver prices when the data feed is connected.
 const MONTHLY_SILVER_PRICES = [
   { label: "Apr 12", value: 72.4 },
   { label: "Apr 15", value: 73.8 },
@@ -63,6 +64,7 @@ let pulseState = loadState();
 let walletConnected = localStorage.getItem(PULSE_WALLET_KEY) === "true";
 let pulseToastTimer = null;
 let countdownTimer = null;
+let monthlyChartState = null;
 
 const els = {
   walletButton: document.querySelector("#pulseWalletButton"),
@@ -490,6 +492,8 @@ function render() {
   renderProfile();
   populateAdminForm(round);
   renderCountdown(round);
+  hideMonthlyChartHover();
+  syncPulseHeaderSpot();
 }
 
 function renderWallet() {
@@ -506,10 +510,10 @@ function renderHero(round) {
   els.pulseHeaderMetric.innerHTML = `
     <span>Spot</span>
     <strong>${formatPrice(round.currentPrice)}</strong>
-    <small>silver</small>
+    <small>demo feed</small>
   `;
   els.pulseSpotInline.innerHTML = `
-    <span>Silver spot</span>
+    <span>Spot</span>
     <strong>${formatPrice(round.currentPrice)}</strong>
     <small>demo feed</small>
   `;
@@ -595,6 +599,20 @@ function renderMonthlyChart(round) {
   const currentY = yFor(current.value);
   const change = current.value - prices[0].value;
   const changeClass = change >= 0 ? "is-up" : "is-down";
+  const plottedPrices = prices.map((point, index) => ({
+    ...point,
+    x: padX + index * step,
+    y: yFor(point.value)
+  }));
+
+  monthlyChartState = {
+    width,
+    height,
+    padX,
+    padTop,
+    chartBottom: height - padBottom,
+    prices: plottedPrices
+  };
 
   els.monthlySilverChart.innerHTML = `
     <div class="monthly-chart-header">
@@ -619,8 +637,72 @@ function renderMonthlyChart(round) {
       <text class="monthly-axis" x="${padX}" y="${height - 10}">${prices[0].label}</text>
       <text class="monthly-axis" x="${width / 2 - 24}" y="${height - 10}">May</text>
       <text class="monthly-axis" x="${width - padX - 40}" y="${height - 10}">${current.label}</text>
+      <g class="monthly-hover-layer" aria-hidden="true">
+        <line class="monthly-crosshair" x1="${currentX}" x2="${currentX}" y1="${padTop}" y2="${height - padBottom}"></line>
+        <circle class="monthly-hover-dot" cx="${currentX}" cy="${currentY.toFixed(1)}" r="6"></circle>
+      </g>
     </svg>
+    <div class="monthly-chart-tooltip" aria-hidden="true">
+      <span data-monthly-hover-label>${current.label}</span>
+      <strong data-monthly-hover-price>${formatPrice(current.value)}</strong>
+    </div>
   `;
+}
+
+function updateMonthlyChartHover(event) {
+  if (!monthlyChartState) {
+    return;
+  }
+
+  const svg = els.monthlySilverChart.querySelector("svg");
+  const tooltip = els.monthlySilverChart.querySelector(".monthly-chart-tooltip");
+
+  if (!svg || !tooltip) {
+    return;
+  }
+
+  const svgRect = svg.getBoundingClientRect();
+  const chartRect = els.monthlySilverChart.getBoundingClientRect();
+  const viewX = Math.min(
+    monthlyChartState.width - monthlyChartState.padX,
+    Math.max(
+      monthlyChartState.padX,
+      (event.clientX - svgRect.left) / svgRect.width * monthlyChartState.width
+    )
+  );
+  const point = monthlyChartState.prices.reduce((closest, candidate) => (
+    Math.abs(candidate.x - viewX) < Math.abs(closest.x - viewX) ? candidate : closest
+  ));
+  const cssX = svgRect.left - chartRect.left + point.x / monthlyChartState.width * svgRect.width;
+  const cssY = svgRect.top - chartRect.top + point.y / monthlyChartState.height * svgRect.height;
+  const tooltipX = chartRect.width > 128 ? Math.min(Math.max(cssX, 64), chartRect.width - 64) : cssX;
+
+  els.monthlySilverChart.classList.add("is-hovering");
+  els.monthlySilverChart.querySelector(".monthly-crosshair")?.setAttribute("x1", point.x.toFixed(1));
+  els.monthlySilverChart.querySelector(".monthly-crosshair")?.setAttribute("x2", point.x.toFixed(1));
+  els.monthlySilverChart.querySelector(".monthly-hover-dot")?.setAttribute("cx", point.x.toFixed(1));
+  els.monthlySilverChart.querySelector(".monthly-hover-dot")?.setAttribute("cy", point.y.toFixed(1));
+  tooltip.style.left = `${tooltipX}px`;
+  tooltip.style.top = `${Math.max(cssY, 44)}px`;
+  tooltip.querySelector("[data-monthly-hover-label]").textContent = point.label;
+  tooltip.querySelector("[data-monthly-hover-price]").textContent = formatPrice(point.value);
+}
+
+function hideMonthlyChartHover() {
+  els.monthlySilverChart.classList.remove("is-hovering");
+}
+
+function syncPulseHeaderSpot() {
+  const topbar = document.querySelector(".topbar");
+
+  if (!topbar || !els.pulseSpotInline) {
+    return;
+  }
+
+  const inlineTop = els.pulseSpotInline.getBoundingClientRect().top;
+  const isStuck = window.scrollY > 160 && inlineTop <= 92;
+  topbar.classList.toggle("has-spot", isStuck);
+  document.body.classList.toggle("market-stuck", isStuck);
 }
 
 function renderRoundDetails(round) {
@@ -1151,6 +1233,11 @@ function wireEvents() {
   els.settlePulseButton.addEventListener("click", settleActiveRound);
   els.markRewardsApprovedButton.addEventListener("click", () => markActiveRewards("approved"));
   els.markRewardsPaidButton.addEventListener("click", () => markActiveRewards("paid"));
+  els.monthlySilverChart.addEventListener("pointermove", updateMonthlyChartHover);
+  els.monthlySilverChart.addEventListener("pointerleave", hideMonthlyChartHover);
+  els.monthlySilverChart.addEventListener("mousemove", updateMonthlyChartHover);
+  els.monthlySilverChart.addEventListener("mouseleave", hideMonthlyChartHover);
+  els.monthlySilverChart.addEventListener("click", updateMonthlyChartHover);
 
   els.resetPulseButton.addEventListener("click", () => {
     localStorage.removeItem(PULSE_STORAGE_KEY);
@@ -1161,10 +1248,13 @@ function wireEvents() {
   });
 
   window.addEventListener("focus", () => renderCountdown(getActiveRound()));
+  window.addEventListener("scroll", syncPulseHeaderSpot, { passive: true });
+  window.addEventListener("resize", syncPulseHeaderSpot);
 }
 
 wireEvents();
 saveState();
 render();
+syncPulseHeaderSpot();
 clearInterval(countdownTimer);
 countdownTimer = setInterval(() => renderCountdown(getActiveRound()), 1000);
