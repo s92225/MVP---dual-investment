@@ -65,6 +65,7 @@ let walletConnected = localStorage.getItem(PULSE_WALLET_KEY) === "true";
 let pulseToastTimer = null;
 let countdownTimer = null;
 let monthlyChartState = null;
+let celebrationTimer = null;
 
 const els = {
   walletButton: document.querySelector("#pulseWalletButton"),
@@ -82,6 +83,7 @@ const els = {
   countdownValue: document.querySelector("#countdownValue"),
   predictUpButton: document.querySelector("#predictUpButton"),
   predictDownButton: document.querySelector("#predictDownButton"),
+  predictionCelebration: document.querySelector("#predictionCelebration"),
   userPredictionStatus: document.querySelector("#userPredictionStatus"),
   participantCount: document.querySelector("#participantCount"),
   sentimentUpBar: document.querySelector("#sentimentUpBar"),
@@ -477,6 +479,72 @@ function showToast(message) {
   els.toast.classList.add("is-visible");
   clearTimeout(pulseToastTimer);
   pulseToastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), 2600);
+}
+
+function launchPredictionCelebration(side, triggerButton) {
+  const palette = side === "UP"
+    ? ["#00c176", "#7df0bf", "#67c7ff", "#f3f7fb"]
+    : ["#ff3b4f", "#ff8a94", "#f0a47a", "#f3f7fb"];
+  const overlayRect = els.predictionCelebration.getBoundingClientRect();
+  const buttonRect = triggerButton?.getBoundingClientRect();
+  const originX = buttonRect
+    ? buttonRect.left - overlayRect.left + buttonRect.width / 2
+    : overlayRect.width / 2;
+  const originY = buttonRect
+    ? buttonRect.top - overlayRect.top + buttonRect.height / 2
+    : overlayRect.height / 2;
+
+  els.predictionCelebration.style.setProperty("--burst-origin-x", `${originX}px`);
+  els.predictionCelebration.style.setProperty("--burst-origin-y", `${originY}px`);
+  els.predictionCelebration.style.setProperty("--burst-glow", palette[0]);
+
+  const fragments = [
+    '<span class="celebration-core"></span>',
+    '<span class="celebration-ring"></span>'
+  ];
+
+  fragments.push(...Array.from({ length: 30 }, (_, index) => {
+    const color = palette[index % palette.length];
+    const angle = (Math.PI * 2 * index) / 30 + (index % 2) * 0.08;
+    const distance = 76 + (index % 6) * 12;
+    const travelX = Math.cos(angle) * distance;
+    const travelY = Math.sin(angle) * distance - 12;
+    const delay = (index % 6) * 0.016;
+    const rotate = -48 + (index % 11) * 10;
+    const size = index % 5 === 0 ? 13 : index % 2 === 0 ? 10 : 8;
+    const shapeClass = index % 4 === 0 ? " is-dot" : index % 3 === 0 ? " is-square" : "";
+    return `
+      <span
+        class="confetti-piece${shapeClass}"
+        style="--confetti-origin-x:${originX}px;--confetti-origin-y:${originY}px;--confetti-delay:${delay}s;--confetti-travel-x:${travelX.toFixed(1)}px;--confetti-travel-y:${travelY.toFixed(1)}px;--confetti-rotate:${rotate}deg;--confetti-color:${color};--confetti-size:${size}px"
+      ></span>
+    `;
+  }));
+
+  fragments.push(...Array.from({ length: 10 }, (_, index) => {
+    const color = palette[(index + 1) % palette.length];
+    const angle = (-Math.PI / 2) + ((index - 4.5) * 0.26);
+    const distance = 92 + (index % 3) * 18;
+    const travelX = Math.cos(angle) * distance;
+    const travelY = Math.sin(angle) * distance;
+    const delay = 0.02 + (index % 5) * 0.018;
+    const length = 20 + (index % 3) * 6;
+    return `
+      <span
+        class="confetti-spark"
+        style="--confetti-origin-x:${originX}px;--confetti-origin-y:${originY}px;--confetti-delay:${delay}s;--confetti-travel-x:${travelX.toFixed(1)}px;--confetti-travel-y:${travelY.toFixed(1)}px;--confetti-color:${color};--confetti-length:${length}px;--confetti-rotate:${(angle * 180 / Math.PI).toFixed(1)}deg"
+      ></span>
+    `;
+  }));
+
+  els.predictionCelebration.innerHTML = fragments.join("");
+
+  els.predictionCelebration.classList.add("is-active");
+  clearTimeout(celebrationTimer);
+  celebrationTimer = setTimeout(() => {
+    els.predictionCelebration.classList.remove("is-active");
+    els.predictionCelebration.innerHTML = "";
+  }, 1600);
 }
 
 function render() {
@@ -1066,6 +1134,7 @@ function submitPrediction(side) {
   });
 
   saveState();
+  launchPredictionCelebration(side, side === "UP" ? els.predictUpButton : els.predictDownButton);
   render();
   showToast(`Prediction locked: ${side}.`);
 }

@@ -1306,6 +1306,7 @@ select:focus {
 }
 
 .prediction-actions {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
@@ -1377,6 +1378,197 @@ select:focus {
 .pulse-status-line {
   display: none;
   background: var(--surface-elevated);
+}
+
+.prediction-celebration {
+  pointer-events: none;
+  position: absolute;
+  inset: -42px -18px -42px;
+  z-index: 3;
+  overflow: visible;
+}
+
+.prediction-celebration.is-active .celebration-core {
+  animation: predictionCoreFlash 360ms ease-out forwards;
+}
+
+.prediction-celebration.is-active .celebration-ring {
+  animation: predictionBurstRing 620ms ease-out forwards;
+}
+
+.prediction-celebration.is-active .confetti-piece {
+  animation: predictionConfettiBurst 880ms cubic-bezier(0.16, 0.84, 0.24, 1) forwards;
+}
+
+.prediction-celebration.is-active .confetti-spark {
+  animation: predictionSparkBurst 760ms cubic-bezier(0.18, 0.8, 0.26, 1) forwards;
+}
+
+.celebration-core,
+.celebration-ring,
+.confetti-spark,
+.confetti-piece {
+  position: absolute;
+  left: var(--burst-origin-x, 50%);
+  top: var(--burst-origin-y, 50%);
+}
+
+.celebration-core {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.98) 0%, var(--burst-glow, #00c176) 58%, rgba(255, 255, 255, 0) 100%);
+  opacity: 0;
+  transform: translate3d(-50%, -50%, 0) scale(0.35);
+  filter: blur(0.3px);
+}
+
+.celebration-ring {
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--burst-glow, #00c176) 75%, white 25%);
+  border-radius: 999px;
+  opacity: 0;
+  transform: translate3d(-50%, -50%, 0) scale(0.3);
+}
+
+.confetti-piece {
+  left: var(--confetti-origin-x);
+  top: var(--confetti-origin-y);
+  width: var(--confetti-size);
+  height: calc(var(--confetti-size) * 0.7);
+  border-radius: 3px;
+  background: var(--confetti-color);
+  opacity: 0;
+  transform: translate3d(-50%, -50%, 0) rotate(0deg) scale(0.6);
+  transform-origin: center;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--confetti-color) 55%, transparent);
+}
+
+.confetti-piece.is-dot {
+  border-radius: 999px;
+  width: calc(var(--confetti-size) * 0.82);
+  height: calc(var(--confetti-size) * 0.82);
+}
+
+.confetti-piece.is-square {
+  height: var(--confetti-size);
+}
+
+.confetti-spark {
+  width: 3px;
+  height: var(--confetti-length);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, var(--confetti-color) 40%, rgba(255, 255, 255, 0) 100%);
+  opacity: 0;
+  transform: translate3d(-50%, -84%, 0) rotate(var(--confetti-rotate)) scaleY(0.25);
+  transform-origin: center bottom;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--confetti-color) 72%, transparent));
+}
+
+@keyframes predictionCoreFlash {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(0.35);
+  }
+
+  28% {
+    opacity: 0.95;
+    transform: translate3d(-50%, -50%, 0) scale(1.2);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(1.9);
+  }
+}
+
+@keyframes predictionBurstRing {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(0.3);
+  }
+
+  24% {
+    opacity: 0.85;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) scale(7.4);
+  }
+}
+
+@keyframes predictionConfettiBurst {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0) rotate(0deg) scale(0.4);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) rotate(0deg) scale(1);
+  }
+
+  72% {
+    opacity: 1;
+    transform:
+      translate3d(
+        calc(-50% + var(--confetti-travel-x)),
+        calc(-50% + var(--confetti-travel-y)),
+        0
+      )
+      rotate(var(--confetti-rotate))
+      scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(
+        calc(-50% + var(--confetti-travel-x) * 1.08),
+        calc(-50% + var(--confetti-travel-y) + 24px),
+        0
+      )
+      rotate(calc(var(--confetti-rotate) * 1.8))
+      scale(0.9);
+  }
+}
+
+@keyframes predictionSparkBurst {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -84%, 0) rotate(var(--confetti-rotate)) scaleY(0.18);
+  }
+
+  18% {
+    opacity: 1;
+    transform: translate3d(-50%, -84%, 0) rotate(var(--confetti-rotate)) scaleY(1);
+  }
+
+  78% {
+    opacity: 0.95;
+    transform:
+      translate3d(
+        calc(-50% + var(--confetti-travel-x)),
+        calc(-84% + var(--confetti-travel-y)),
+        0
+      )
+      rotate(var(--confetti-rotate))
+      scaleY(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(
+        calc(-50% + var(--confetti-travel-x) * 1.06),
+        calc(-84% + var(--confetti-travel-y) + 10px),
+        0
+      )
+      rotate(var(--confetti-rotate))
+      scaleY(0.72);
+  }
 }
 
 .sentiment-card {
@@ -1780,5 +1972,14 @@ select:focus {
 
   .admin-actions {
     padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prediction-celebration.is-active .celebration-core,
+  .prediction-celebration.is-active .celebration-ring,
+  .prediction-celebration.is-active .confetti-spark,
+  .prediction-celebration.is-active .confetti-piece {
+    animation-duration: 1ms;
   }
 }

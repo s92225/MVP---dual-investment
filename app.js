@@ -557,7 +557,6 @@ function renderDetail() {
   detailContent.innerHTML = `
     <div class="detail-stack">
       <div class="detail-header">
-        <p class="eyebrow">${modeLabel(product.mode)} / ${expiryLabel()}</p>
         <h3 id="detailTitle">${product.choice}</h3>
         <div class="info-popover">
           <button class="info-button" type="button" aria-describedby="settlementTooltip">Settlement rules</button>
