@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SilverTimes Dual Investment MVP</title>
+    <title>STT Smart Earn</title>
     <link rel="stylesheet" href="styles.css?v=20260512-width">
   </head>
   <body>
@@ -25,7 +25,7 @@
       <section id="dashboard" class="hero-band" aria-labelledby="pageTitle">
         <div class="hero-copy">
           <div id="spotPricePill" class="spot-pill" aria-live="polite"></div>
-          <h1 id="pageTitle">Set your silver target. Earn either way.</h1>
+          <h1 id="pageTitle">STT Smart Earn</h1>
           <div class="hero-actions">
             <a class="primary-button" href="#products">Start Investing</a>
             <a class="ghost-button" href="#positions">View Positions</a>
@@ -34,7 +34,7 @@
         </div>
         <div class="hero-visual" aria-hidden="true">
           <div class="orbital-card large">
-            <span>Best APR</span>
+            <span>Best APY</span>
             <strong id="heroApr">27.2%</strong>
             <small>Source preset</small>
           </div>
@@ -45,7 +45,7 @@
           </div>
           <div class="orbital-card warm">
             <span>Terms</span>
-            <strong id="heroTerm">Weekly / Monthly</strong>
+            <strong id="heroTerm">1M / 3M / 6M</strong>
           </div>
         </div>
       </section>
@@ -77,12 +77,8 @@
               Sell High
             </button>
           </div>
-          <div class="expiry-picker" aria-label="Expiry selector">
-            <div class="segmented term-control" role="tablist" aria-label="Expiry type">
-              <button class="term-segment is-active" type="button" data-family="weekly" role="tab" aria-selected="true">Weekly</button>
-              <button class="term-segment" type="button" data-family="monthly" role="tab" aria-selected="false">Monthly</button>
-            </div>
-            <div id="expiryList" class="expiry-list" role="tablist" aria-label="Expiry date"></div>
+          <div class="expiry-picker" aria-label="Settlement selector">
+            <div id="expiryList" class="expiry-list" role="tablist" aria-label="Settlement term"></div>
           </div>
         </div>
 
@@ -137,6 +133,21 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="confirmModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" hidden>
+      <div class="confirm-card">
+        <p class="eyebrow">Review order</p>
+        <h3 id="confirmTitle">Confirm dual investment</h3>
+        <div id="confirmSummary" class="confirm-summary"></div>
+        <label class="confirm-check">
+          <input id="confirmTerms" type="checkbox">
+          <span>I understand settlement may return a different asset, funds are locked until settlement, and potential earning is an estimate.</span>
+        </label>
+        <div class="confirm-actions">
+          <button id="cancelConfirmButton" class="ghost-button compact" type="button">Cancel</button>
+          <button id="confirmDepositButton" class="primary-button" type="button" disabled>Confirm</button>
+        </div>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>

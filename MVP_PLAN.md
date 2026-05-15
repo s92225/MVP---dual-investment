@@ -46,12 +46,12 @@ Verification link from source doc:
 - Product tabs: Buy Low and Sell High.
 - Product list showing choice, COMEX reference, strike, exercise date, reward estimate, period yield, APR, and verification link.
 - Selected product detail panel.
-- Expiry selector: weekly Mon-Fri expiries and a monthly expiry.
+- Settlement term selector: monthly-only 1M, 3M, and 6M terms.
 
 ### Deposit Flow
 
 - Amount input.
-- Quote preview using source APR values. Weekly and monthly rewards are previewed from APR over the selected expiry window.
+- Quote preview using source APR values. Potential earning is previewed from APR over the selected settlement window.
 - Two outcome explanations:
   - Buy Low: final price above target returns USDT principal plus reward estimate; final price at or below target accumulates STT at the target price.
   - Sell High: final price below target returns STT principal plus reward estimate; final price at or above target sells STT at the target price.
@@ -61,7 +61,7 @@ Verification link from source doc:
 
 - Local simulated positions stored in browser `localStorage`.
 - Active, settled, and claimable states.
-- Product, deposit amount, target price, expiry, estimated reward, and settlement result.
+- Product, deposit amount, target price, settlement term, estimated potential earning, and settlement result.
 
 ### Admin Settlement Mock
 

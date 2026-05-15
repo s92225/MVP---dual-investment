@@ -116,40 +116,31 @@ const SPOT_PRICE = {
   asOf: "May 11, 2026 10:59 PM ET",
   source: "Bullion.com"
 };
+const STT_PER_SPOT_UNIT = 1;
 const CHART_BOUNDS = { floor: 60, ceiling: 110 };
 const CHART_PATH_PRICES = [92, 86, 88, 82, 78, 76, 83, SPOT_PRICE.value];
 const EXPIRY_APR_MULTIPLIERS = {
-  "weekly-2026-05-18": 1.22,
-  "weekly-2026-05-19": 1.1,
-  "weekly-2026-05-20": 0.98,
-  "weekly-2026-05-21": 0.9,
-  "weekly-2026-05-22": 0.84,
-  "monthly-2026-06-25": 1,
-  "monthly-2026-07-30": 0.84,
-  "monthly-2026-08-27": 0.72
+  "term-1m": 1,
+  "term-3m": 0.82,
+  "term-6m": 0.64
 };
 const EXPIRY_FAMILIES = {
-  weekly: [
-    { id: "weekly-2026-05-18", label: "Mon, 18 May", shortLabel: "18 May", days: 6 },
-    { id: "weekly-2026-05-19", label: "Tue, 19 May", shortLabel: "19 May", days: 7 },
-    { id: "weekly-2026-05-20", label: "Wed, 20 May", shortLabel: "20 May", days: 8 },
-    { id: "weekly-2026-05-21", label: "Thu, 21 May", shortLabel: "21 May", days: 9 },
-    { id: "weekly-2026-05-22", label: "Fri, 22 May", shortLabel: "22 May", days: 10 }
-  ],
   monthly: [
-    { id: "monthly-2026-06-25", label: "Thu, 25 Jun", shortLabel: "25 Jun", days: 44, sourceExpiry: true },
-    { id: "monthly-2026-07-30", label: "Thu, 30 Jul", shortLabel: "30 Jul", days: 79 },
-    { id: "monthly-2026-08-27", label: "Thu, 27 Aug", shortLabel: "27 Aug", days: 107 }
+    { id: "term-1m", label: "1 Month", shortLabel: "1M", days: 30, months: 1 },
+    { id: "term-3m", label: "3 Months", shortLabel: "3M", days: 90, months: 3 },
+    { id: "term-6m", label: "6 Months", shortLabel: "6M", days: 180, months: 6 }
   ]
 };
 
 let currentMode = "buy-low";
 let selectedProductId = "buy-low-aggressive";
-let selectedExpiryFamily = "weekly";
-let selectedExpiryId = "weekly-2026-05-19";
+let selectedExpiryFamily = "monthly";
+let selectedExpiryId = "term-1m";
 let walletConnected = false;
 let toastTimer = null;
 let depositAmountValue = "";
+let selectedAmountAsset = "USDT";
+let pendingOrder = null;
 const scenarioPrices = {};
 
 const productList = document.querySelector("#productList");
@@ -169,6 +160,11 @@ const spotPricePill = document.querySelector("#spotPricePill");
 const spotPriceInline = document.querySelector("#spotPriceInline");
 const spotPriceHeader = document.querySelector("#spotPriceHeader");
 const controlsRow = document.querySelector(".controls-row");
+const confirmModal = document.querySelector("#confirmModal");
+const confirmSummary = document.querySelector("#confirmSummary");
+const confirmTerms = document.querySelector("#confirmTerms");
+const confirmDepositButton = document.querySelector("#confirmDepositButton");
+const cancelConfirmButton = document.querySelector("#cancelConfirmButton");
 
 function formatUsd(value) {
   return `US$${Number(value).toLocaleString("en-US", {
@@ -184,12 +180,63 @@ function formatNumber(value, digits = 4) {
   });
 }
 
+function formatTokenAmount(value, asset) {
+  return `${Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: asset === "USDT" ? 2 : 0,
+    maximumFractionDigits: asset === "USDT" ? 2 : 4
+  })} ${asset}`;
+}
+
 function formatPercent(value) {
   return `${(value * 100).toFixed(2).replace(/\.00$/, "")}%`;
 }
 
 function formatInputValue(value) {
   return String(value).replace(/"/g, "&quot;");
+}
+
+function formatAmountInputValue(value, asset) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return "";
+  }
+
+  const digits = asset === "USDT" ? 2 : 4;
+  return amount
+    .toFixed(digits)
+    .replace(/\.?0+$/, "");
+}
+
+function sttReferencePrice(price = SPOT_PRICE.value) {
+  return price / STT_PER_SPOT_UNIT;
+}
+
+function addCalendarMonths(date, months) {
+  const result = new Date(date);
+  const day = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(day, lastDay));
+  return result;
+}
+
+function settlementDateForExpiry(expiry = selectedExpiry(), startDate = new Date()) {
+  if (expiry.months) {
+    return addCalendarMonths(startDate, expiry.months);
+  }
+
+  const date = new Date(startDate);
+  date.setDate(date.getDate() + expiry.days);
+  return date;
+}
+
+function formatSettlementDate(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(new Date(date));
 }
 
 function renderSpotPrice() {
@@ -224,24 +271,42 @@ function termAdjustedYield(product) {
 function selectedExpiry() {
   return Object.values(EXPIRY_FAMILIES)
     .flat()
-    .find((expiry) => expiry.id === selectedExpiryId) || EXPIRY_FAMILIES.weekly[1];
+    .find((expiry) => expiry.id === selectedExpiryId) || EXPIRY_FAMILIES.monthly[0];
 }
 
 function expiryLabel() {
-  return selectedExpiry().label;
+  const expiry = selectedExpiry();
+  return `${expiry.label} / ${formatSettlementDate(settlementDateForExpiry(expiry))}`;
 }
 
 function expiryShortLabel() {
   return selectedExpiry().shortLabel;
 }
 
+function expiryProductLabel() {
+  const expiry = selectedExpiry();
+  return `${expiry.shortLabel} / ${formatSettlementDate(settlementDateForExpiry(expiry))}`;
+}
+
+function positionExpiryLabel(position) {
+  const expiry = Object.values(EXPIRY_FAMILIES)
+    .flat()
+    .find((item) => item.id === position.expiryId) || EXPIRY_FAMILIES.monthly[0];
+  const settlementDate = position.expiryDate
+    ? new Date(position.expiryDate)
+    : settlementDateForExpiry(expiry, position.createdAt ? new Date(position.createdAt) : new Date());
+
+  return `${expiry.label} / ${formatSettlementDate(settlementDate)}`;
+}
+
 function renderExpiryOptions() {
   expiryList.innerHTML = EXPIRY_FAMILIES[selectedExpiryFamily]
     .map((expiry) => {
       const active = expiry.id === selectedExpiryId ? " is-active" : "";
+      const settlementDate = formatSettlementDate(settlementDateForExpiry(expiry));
       return `
-        <button class="expiry-option${active}" type="button" data-expiry="${expiry.id}" role="tab" aria-selected="${expiry.id === selectedExpiryId}">
-          ${expiry.shortLabel}
+        <button class="expiry-option${active}" type="button" data-expiry="${expiry.id}" role="tab" aria-selected="${expiry.id === selectedExpiryId}" aria-label="${expiry.label}, settlement ${settlementDate}">
+          <span>${expiry.shortLabel}</span>
         </button>
       `;
     })
@@ -282,14 +347,8 @@ function renderTabs() {
     button.setAttribute("aria-selected", String(isActive));
   });
 
-  document.querySelectorAll(".term-segment").forEach((button) => {
-    const isActive = button.dataset.family === selectedExpiryFamily;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-selected", String(isActive));
-  });
-
   renderExpiryOptions();
-  heroTerm.textContent = "Weekly / Monthly";
+  heroTerm.textContent = "1M / 3M / 6M";
 }
 
 function renderProductList() {
@@ -304,12 +363,13 @@ function renderProductList() {
   const avgApr = products.reduce((sum, product) => sum + productApr(product), 0) / products.length;
   modeSummary.innerHTML = `
     <span style="--fill: ${Math.min(100, Math.round(avgApr * 320))}%"></span>
-    <strong>${formatPercent(avgApr)} avg APR</strong>
+    <strong>${formatPercent(avgApr)} avg APY</strong>
   `;
 
   productList.innerHTML = products
     .map((product) => {
       const selectedClass = product.id === selectedProductId ? " is-selected" : "";
+      const quote = quoteForAmount(product, 1, "STT");
       return `
         <button class="product-row${selectedClass}" type="button" data-product-id="${product.id}">
           <span class="product-title">
@@ -321,12 +381,12 @@ function renderProductList() {
             <span class="metric-value">${formatUsd(product.strike)}</span>
           </span>
           <span class="metric">
-            <span class="metric-label">APR</span>
-            <span class="metric-value">${formatPercent(productApr(product))}</span>
+            <span class="metric-label">Potential Earning</span>
+            <span class="metric-value">${formatUsd(quote.rewardValue)}</span>
           </span>
           <span class="metric">
-            <span class="metric-label">Expiry</span>
-            <span class="metric-value">${expiryShortLabel()}</span>
+            <span class="metric-label">Settlement</span>
+            <span class="metric-value">${expiryProductLabel()}</span>
           </span>
         </button>
       `;
@@ -334,34 +394,85 @@ function renderProductList() {
     .join("");
 }
 
-function quoteForAmount(product, amount) {
-  if (!amount || amount <= 0) {
+function amountToProductAsset(product, inputAmount, inputAsset = selectedAmountAsset) {
+  if (!inputAmount || inputAmount <= 0) {
+    return 0;
+  }
+
+  if (inputAsset === product.depositAsset) {
+    return inputAmount;
+  }
+
+  return product.depositAsset === "USDT"
+    ? inputAmount * sttReferencePrice()
+    : inputAmount / sttReferencePrice();
+}
+
+function equivalentAmount(inputAmount, inputAsset) {
+  if (!inputAmount || inputAmount <= 0) {
+    return null;
+  }
+
+  if (inputAsset === "USDT") {
+    return {
+      asset: "STT",
+      amount: inputAmount / sttReferencePrice()
+    };
+  }
+
+  return {
+    asset: "USDT",
+    amount: inputAmount * sttReferencePrice()
+  };
+}
+
+function amountConversionText(inputAmount, inputAsset) {
+  const equivalent = equivalentAmount(inputAmount, inputAsset);
+
+  if (!equivalent) {
+    return `Input USDT or STT; converted at spot ${formatUsd(SPOT_PRICE.value)}.`;
+  }
+
+  return `${formatTokenAmount(inputAmount, inputAsset)} ~${formatTokenAmount(equivalent.amount, equivalent.asset)}`;
+}
+
+function quoteForDepositAmount(product, depositAmount) {
+  if (!depositAmount || depositAmount <= 0) {
     return null;
   }
 
   const adjustedYield = termAdjustedYield(product);
+  const amount = depositAmount;
 
   if (product.mode === "buy-low") {
     const rewardValue = amount * adjustedYield;
+    const notionalStt = amount / sttReferencePrice();
     return {
       rewardValue,
       rewardAsset: "USDT value",
+      earningPerStt: notionalStt ? rewardValue / notionalStt : 0,
       noConversionAmount: amount + rewardValue,
       noConversionAsset: "USDT",
-      conversionAmount: (amount + rewardValue) / product.strike,
+      conversionAmount: (amount + rewardValue) / sttReferencePrice(product.strike),
       conversionAsset: "STT"
     };
   }
 
-  const rewardValue = amount * adjustedYield * product.strike;
+  const targetUsdtPerStt = sttReferencePrice(product.strike);
+  const rewardValue = amount * adjustedYield * targetUsdtPerStt;
   return {
     rewardValue,
     rewardAsset: "USDT value",
-    noConversionAmount: amount + rewardValue / product.strike,
+    earningPerStt: rewardValue / amount,
+    noConversionAmount: amount + rewardValue / targetUsdtPerStt,
     noConversionAsset: "STT",
-    conversionAmount: amount * product.strike + rewardValue,
+    conversionAmount: amount * targetUsdtPerStt + rewardValue,
     conversionAsset: "USDT"
   };
+}
+
+function quoteForAmount(product, inputAmount, inputAsset = selectedAmountAsset) {
+  return quoteForDepositAmount(product, amountToProductAsset(product, inputAmount, inputAsset));
 }
 
 function scenarioBounds(product) {
@@ -395,7 +506,7 @@ function scenarioOutcome(product, quote, price) {
   if (!converts && product.mode === "buy-low") {
     return {
       label: "USDT back",
-      value: `${formatNumber(quote.noConversionAmount)} ${quote.noConversionAsset}`,
+      value: formatTokenAmount(quote.noConversionAmount, quote.noConversionAsset),
       tone: "primary"
     };
   }
@@ -403,7 +514,7 @@ function scenarioOutcome(product, quote, price) {
   if (converts && product.mode === "buy-low") {
     return {
       label: "Buy STT",
-      value: `${formatNumber(quote.conversionAmount)} ${quote.conversionAsset}`,
+      value: formatTokenAmount(quote.conversionAmount, quote.conversionAsset),
       tone: "convert"
     };
   }
@@ -411,14 +522,14 @@ function scenarioOutcome(product, quote, price) {
   if (!converts) {
     return {
       label: "STT back",
-      value: `${formatNumber(quote.noConversionAmount)} ${quote.noConversionAsset}`,
+      value: formatTokenAmount(quote.noConversionAmount, quote.noConversionAsset),
       tone: "primary"
     };
   }
 
   return {
     label: "Sell STT",
-    value: `${formatNumber(quote.conversionAmount)} ${quote.conversionAsset}`,
+    value: formatTokenAmount(quote.conversionAmount, quote.conversionAsset),
     tone: "convert"
   };
 }
@@ -442,7 +553,7 @@ function renderScenarioChart(product, quote, scenarioPrice) {
   return `
     <div class="scenario-chart ${quote ? "" : "is-empty"}" data-outcome="${outcome.tone}">
       <div class="chart-header">
-        <span>Reward</span>
+        <span>Potential Earning</span>
         <strong>${rewardLabel}</strong>
       </div>
       <div class="line-chart" aria-label="Interactive payout scenario">
@@ -456,11 +567,11 @@ function renderScenarioChart(product, quote, scenarioPrice) {
           <text class="chart-tooltip" x="224" y="${Math.max(28, currentY - 18).toFixed(1)}">Spot ${formatUsd(SPOT_PRICE.value)}</text>
           <text class="chart-price" x="296" y="${Math.min(176, scenarioY + 20).toFixed(1)}">${formatUsd(scenarioPrice)}</text>
           <text class="chart-axis" x="24" y="181">Today</text>
-          <text class="chart-axis" x="296" y="181">Expiry</text>
+          <text class="chart-axis" x="286" y="181">Settlement</text>
         </svg>
       </div>
       <label class="scenario-slider">
-        <span>Expiry silver price</span>
+        <span>Settlement Price</span>
         <strong id="scenarioPriceLabel">${formatUsd(scenarioPrice)}</strong>
         <input
           id="scenarioPrice"
@@ -469,7 +580,7 @@ function renderScenarioChart(product, quote, scenarioPrice) {
           max="${bounds.ceiling}"
           step="0.1"
           value="${scenarioPrice}"
-          aria-label="Expiry silver price"
+          aria-label="Settlement Price"
         >
       </label>
       <div class="scenario-result">
@@ -529,7 +640,7 @@ function updateRewardPreview(product, quote) {
     return;
   }
 
-  rewardValue.textContent = quote ? `~${formatUsd(quote.rewardValue)}` : "Enter amount";
+  rewardValue.textContent = quote ? formatUsd(quote.rewardValue) : "Enter amount";
 }
 
 function renderQuote(product) {
@@ -541,6 +652,7 @@ function renderQuote(product) {
 
   quoteBox.innerHTML = renderScenarioChart(product, quote, scenarioPrice);
   updateRewardPreview(product, quote);
+  updateAmountConversion();
 
   const scenarioInput = document.querySelector("#scenarioPrice");
   scenarioInput.addEventListener("input", () => {
@@ -575,45 +687,34 @@ function renderDetail() {
           <strong class="metric-value">${formatUsd(product.strike)}</strong>
         </div>
         <div class="stat">
-          <span class="metric-label">Expiry</span>
+          <span class="metric-label">Settlement</span>
           <strong class="metric-value">${expiryLabel()}</strong>
         </div>
         <div class="stat">
-          <span class="metric-label">APR</span>
+          <span class="metric-label">APY</span>
           <strong class="metric-value">${formatPercent(productApr(product))}</strong>
         </div>
         <div class="stat">
-          <span class="metric-label">Reward</span>
-          <strong id="detailRewardValue" class="metric-value">${quote ? `~${formatUsd(quote.rewardValue)}` : "Enter amount"}</strong>
+          <span class="metric-label">Potential Earning</span>
+          <strong id="detailRewardValue" class="metric-value">${quote ? formatUsd(quote.rewardValue) : "Enter amount"}</strong>
         </div>
       </div>
 
       <form id="depositForm" class="deposit-form">
-        <label>
-          Amount (${product.depositAsset})
+        <div class="amount-field">
+          <div class="amount-heading">
+            <label for="depositAmount">Invest Amount</label>
+            <div class="amount-unit-toggle" role="tablist" aria-label="Amount currency">
+              <button class="${selectedAmountAsset === "USDT" ? "is-active" : ""}" type="button" data-amount-asset="USDT" role="tab" aria-selected="${selectedAmountAsset === "USDT"}">USDT</button>
+              <button class="${selectedAmountAsset === "STT" ? "is-active" : ""}" type="button" data-amount-asset="STT" role="tab" aria-selected="${selectedAmountAsset === "STT"}">STT</button>
+            </div>
+          </div>
           <input id="depositAmount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" value="${formatInputValue(depositAmountValue)}">
-        </label>
+          <div id="amountConversion" class="amount-conversion">
+            ${amountConversionText(amount, selectedAmountAsset)}
+          </div>
+        </div>
         <div id="quoteBox" class="quote-box"></div>
-        <ul class="ack-list">
-          <li>
-            <label>
-              <input type="checkbox" name="ack">
-              <span>I understand settlement may return a different asset.</span>
-            </label>
-          </li>
-          <li>
-            <label>
-              <input type="checkbox" name="ack">
-              <span>I understand funds are locked until the selected expiry.</span>
-            </label>
-          </li>
-          <li>
-            <label>
-              <input type="checkbox" name="ack">
-              <span>I understand reward is previewed from APR for the selected expiry.</span>
-            </label>
-          </li>
-        </ul>
         <button class="primary-button" type="submit">${product.userAction}</button>
       </form>
     </div>
@@ -621,12 +722,39 @@ function renderDetail() {
 
   const amountInput = document.querySelector("#depositAmount");
   const depositForm = document.querySelector("#depositForm");
+  document.querySelectorAll("[data-amount-asset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextAsset = button.dataset.amountAsset;
+      const inputAmount = Number(depositAmountValue);
+
+      if (nextAsset === selectedAmountAsset) {
+        return;
+      }
+
+      if (inputAmount > 0) {
+        const equivalent = equivalentAmount(inputAmount, selectedAmountAsset);
+        depositAmountValue = formatAmountInputValue(equivalent.amount, nextAsset);
+      }
+
+      selectedAmountAsset = nextAsset;
+      renderDetail();
+    });
+  });
   amountInput.addEventListener("input", () => {
     depositAmountValue = amountInput.value;
     renderQuote(product);
   });
   depositForm.addEventListener("submit", (event) => handleDeposit(event, product));
   renderQuote(product);
+}
+
+function updateAmountConversion() {
+  const conversion = document.querySelector("#amountConversion");
+  if (!conversion) {
+    return;
+  }
+
+  conversion.textContent = amountConversionText(Number(depositAmountValue), selectedAmountAsset);
 }
 
 function handleDeposit(event, product) {
@@ -637,30 +765,66 @@ function handleDeposit(event, product) {
     return;
   }
 
-  const amount = Number(document.querySelector("#depositAmount").value);
-  const checks = Array.from(document.querySelectorAll("input[name='ack']"));
-  const allChecked = checks.every((checkbox) => checkbox.checked);
+  const inputAmount = Number(document.querySelector("#depositAmount").value);
+  const depositAmount = amountToProductAsset(product, inputAmount, selectedAmountAsset);
 
-  if (!amount || amount <= 0) {
+  if (!inputAmount || inputAmount <= 0) {
     showToast("Enter a deposit amount.");
     return;
   }
 
-  if (!allChecked) {
-    showToast("Confirm all acknowledgements.");
+  const quote = quoteForAmount(product, inputAmount);
+  const expiryDate = settlementDateForExpiry(selectedExpiry());
+  const settlementLabel = expiryLabel();
+  pendingOrder = {
+    productId: product.id,
+    inputAmount,
+    inputAsset: selectedAmountAsset,
+    depositAmount,
+    depositAsset: product.depositAsset,
+    expiryId: selectedExpiryId,
+    expiryDate: expiryDate.toISOString(),
+    expiryLabel: settlementLabel,
+    quote
+  };
+  confirmSummary.innerHTML = `
+    <span class="invest-summary">
+      <small>Invest Amount</small>
+      <strong>${amountConversionText(inputAmount, selectedAmountAsset)}</strong>
+    </span>
+    <span>
+      <small>Settlement</small>
+      <strong>${settlementLabel}</strong>
+    </span>
+    <span>
+      <small>Potential earning</small>
+      <strong>${formatUsd(quote.rewardValue)}</strong>
+    </span>
+  `;
+  confirmTerms.checked = false;
+  confirmDepositButton.disabled = true;
+  confirmModal.hidden = false;
+}
+
+function confirmPendingOrder() {
+  if (!pendingOrder || !confirmTerms.checked) {
+    showToast("Review and accept the terms first.");
     return;
   }
 
-  const quote = quoteForAmount(product, amount);
+  const product = getProduct(pendingOrder.productId);
   const positions = loadPositions();
   const position = {
     id: `POS-${Date.now()}`,
     productId: product.id,
-    amount,
-    depositAsset: product.depositAsset,
-    expiryId: selectedExpiryId,
-    expiryLabel: expiryLabel(),
-    rewardValue: quote.rewardValue,
+    amount: pendingOrder.depositAmount,
+    depositAsset: pendingOrder.depositAsset,
+    inputAmount: pendingOrder.inputAmount,
+    inputAsset: pendingOrder.inputAsset,
+    expiryId: pendingOrder.expiryId,
+    expiryLabel: pendingOrder.expiryLabel,
+    expiryDate: pendingOrder.expiryDate,
+    rewardValue: pendingOrder.quote.rewardValue,
     createdAt: new Date().toISOString(),
     status: "active"
   };
@@ -670,16 +834,17 @@ function handleDeposit(event, product) {
   renderPositions();
   renderSettlementProducts();
   depositAmountValue = "";
-  event.target.reset();
-  renderQuote(product);
+  pendingOrder = null;
+  confirmModal.hidden = true;
+  renderDetail();
   showToast("Demo position created.");
 }
 
 function settlementForPosition(position, finalPrice) {
   const product = getProduct(position.productId);
   const previousExpiryId = selectedExpiryId;
-  selectedExpiryId = position.expiryId || "monthly-2026-06-25";
-  const quote = quoteForAmount(product, position.amount);
+  selectedExpiryId = position.expiryId || "term-1m";
+  const quote = quoteForAmount(product, position.amount, product.depositAsset);
   selectedExpiryId = previousExpiryId;
 
   if (product.mode === "buy-low") {
@@ -717,8 +882,8 @@ function renderPositions() {
       const result = position.settlement;
       const status = position.status === "claimed" ? "Claimed" : position.status === "settled" ? "Claimable" : "Active";
       const payout = result
-        ? `${formatNumber(result.payoutAmount)} ${result.payoutAsset}`
-        : `~${formatUsd(position.rewardValue)} reward value`;
+        ? formatTokenAmount(result.payoutAmount, result.payoutAsset)
+        : `~${formatUsd(position.rewardValue)} potential earning`;
       const action = position.status === "settled"
         ? `<button class="ghost-button compact" type="button" data-claim-id="${position.id}">Claim</button>`
         : `<span class="status-pill">${status}</span>`;
@@ -727,11 +892,11 @@ function renderPositions() {
         <div class="position-row">
           <span class="product-title">
             <strong>${modeLabel(product.mode)} ${product.choice}</strong>
-            <span>${position.expiryLabel || "Thu, 25 Jun"} / ${position.id}</span>
+            <span>${positionExpiryLabel(position)} / ${position.id}</span>
           </span>
           <span class="metric">
             <span class="metric-label">Deposit</span>
-            <span class="metric-value">${formatNumber(position.amount)} ${position.depositAsset}</span>
+            <span class="metric-value">${formatTokenAmount(position.amount, position.depositAsset)}</span>
           </span>
           <span class="metric">
             <span class="metric-label">Strike</span>
@@ -864,6 +1029,24 @@ function wireEvents() {
     savePositions([]);
     renderPositions();
     showToast("Demo positions cleared.");
+  });
+
+  confirmTerms.addEventListener("change", () => {
+    confirmDepositButton.disabled = !confirmTerms.checked;
+  });
+
+  cancelConfirmButton.addEventListener("click", () => {
+    pendingOrder = null;
+    confirmModal.hidden = true;
+  });
+
+  confirmDepositButton.addEventListener("click", confirmPendingOrder);
+
+  confirmModal.addEventListener("click", (event) => {
+    if (event.target === confirmModal) {
+      pendingOrder = null;
+      confirmModal.hidden = true;
+    }
   });
 
   settlementForm.addEventListener("submit", handleSettlement);

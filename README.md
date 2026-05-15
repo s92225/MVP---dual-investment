@@ -32,7 +32,8 @@ Product data is taken only from the Notion page named **Staking**:
 ## Prototype Behavior
 
 - Connect Wallet toggles a local demo wallet state.
-- Expiry selection is structured as weekly Mon-Fri expiries and a monthly expiry. Rewards are previewed from the source APR over the selected expiry window.
+- Settlement term selection is monthly only: 1M, 3M, and 6M. Potential earning is previewed from the selected APR over the selected settlement window.
+- Amount entry accepts either USDT or STT and converts the other side using the displayed spot price.
 - Deposit / Stake CTA stores a local simulated position in `localStorage`.
 - Admin Console settles local positions by product using a final reference price.
 - Claim changes a settled local position to claimed.

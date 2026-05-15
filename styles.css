@@ -483,8 +483,11 @@ h3 {
 }
 
 .expiry-option {
+  display: grid;
+  place-items: center;
+  gap: 1px;
   min-width: 84px;
-  min-height: 40px;
+  min-height: 48px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -559,7 +562,7 @@ h3 {
 
 .product-row {
   display: grid;
-  grid-template-columns: 1fr 130px 130px 120px;
+  grid-template-columns: 1fr 130px 130px 156px;
   gap: 14px;
   align-items: center;
   width: 100%;
@@ -630,6 +633,14 @@ h3 {
 
 .metric-value {
   color: var(--color-ink);
+  font-weight: 500;
+}
+
+.metric-value small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-light-steel);
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -758,6 +769,56 @@ label {
   display: grid;
   gap: 8px;
   color: var(--color-muted-stone);
+}
+
+.amount-field {
+  display: grid;
+  gap: 10px;
+}
+
+.amount-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amount-heading label {
+  display: block;
+}
+
+.amount-unit-toggle {
+  display: inline-flex;
+  min-height: 34px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--color-fog);
+}
+
+.amount-unit-toggle button {
+  min-width: 58px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted-stone);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.expiry-option small {
+  color: var(--color-light-steel);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.amount-unit-toggle button.is-active {
+  background: var(--surface-elevated);
+  color: var(--color-ink);
+}
+
+.amount-conversion {
+  color: var(--color-light-steel);
+  font-size: 13px;
 }
 
 .field {
@@ -1106,6 +1167,83 @@ select:focus {
 .toast.is-visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.64);
+  backdrop-filter: blur(12px);
+}
+
+.confirm-modal[hidden] {
+  display: none;
+}
+
+.confirm-card {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--color-hint-of-grey);
+  border-radius: 24px;
+  background: var(--surface-panel);
+  box-shadow: rgba(0, 0, 0, 0.5) 0 30px 60px -24px;
+}
+
+.confirm-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.confirm-summary span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--color-fog);
+}
+
+.confirm-summary .invest-summary {
+  grid-column: 1 / -1;
+}
+
+.confirm-summary small {
+  color: var(--color-light-steel);
+}
+
+.confirm-summary strong {
+  color: var(--color-ink);
+}
+
+.confirm-check {
+  grid-template-columns: 18px 1fr;
+  align-items: start;
+  gap: 10px;
+  line-height: 1.35;
+}
+
+.confirm-check input {
+  width: 18px;
+  min-height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--color-ink);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirm-actions .primary-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1080px) {
