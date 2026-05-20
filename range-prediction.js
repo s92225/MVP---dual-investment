@@ -3,6 +3,7 @@ const RANGE_WALLET_KEY = "silvertimes-range-prediction-wallet-connected";
 const RANGE_DEMO_WALLET = "0x51cb9f3d6c0a42e89491dd2b7c12f4c0a9c0de55";
 const RANGE_MIN_USDT = 1;
 const MARKET_LIQUIDITY_USDT = 24;
+const DEFAULT_HOUSE_MARGIN_RATE = 0.05;
 const RANGE_SPOT_PRICE = {
   value: 78.42,
   unit: "USD / oz",
@@ -122,6 +123,7 @@ const els = {
   rangeProfilePanel: document.querySelector("#rangeProfilePanel"),
   resetRangeButton: document.querySelector("#resetRangeButton"),
   adminForm: document.querySelector("#rangeAdminForm"),
+  adminHouseMargin: document.querySelector("#adminHouseMargin"),
   adminFinalPrice: document.querySelector("#adminFinalPrice"),
   adminMarketStatus: document.querySelector("#adminMarketStatus"),
   toast: document.querySelector("#rangeToast")
@@ -139,8 +141,14 @@ function loadRangeState() {
 
   return {
     marketStatus: "open",
+    houseMarginRate: DEFAULT_HOUSE_MARGIN_RATE,
     predictions: seedPredictions()
   };
+}
+
+function currentHouseMarginRate(state) {
+  const storedRate = Number(state?.houseMarginRate);
+  return Number.isFinite(storedRate) ? clamp(storedRate, 0, 0.5) : DEFAULT_HOUSE_MARGIN_RATE;
 }
 
 function seedPredictions() {
@@ -260,6 +268,13 @@ function formatSharePrice(price) {
   return `${Math.round(Number(price) * 100)}c`;
 }
 
+function formatUsdAmount(value) {
+  return `$${Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+}
+
 function formatShares(value) {
   return Number(value).toLocaleString("en-US", {
     minimumFractionDigits: 0,
@@ -338,6 +353,24 @@ function priceForSide(side, market = selectedMarket()) {
   return side === "YES" ? market.yesPrice : market.noPrice;
 }
 
+function shareQuote(usdtValue, side = selectedSide, market = selectedMarket(), marginRate = DEFAULT_HOUSE_MARGIN_RATE) {
+  const grossAmount = Number(usdtValue);
+  const sharePrice = priceForSide(side, market);
+  const normalizedMarginRate = clamp(Number(marginRate), 0, 0.5);
+  const marginAmount = Number.isFinite(grossAmount) ? grossAmount * normalizedMarginRate : 0;
+  const netAmount = Number.isFinite(grossAmount) ? Math.max(0, grossAmount - marginAmount) : 0;
+  const shares = sharePrice > 0 ? netAmount / sharePrice : 0;
+
+  return {
+    grossAmount,
+    marginRate: normalizedMarginRate,
+    marginAmount,
+    netAmount,
+    sharePrice,
+    shares
+  };
+}
+
 function resolutionDateForSelectedTerm() {
   return settlementDateForTerm(selectedTerm(), RANGE_SESSION_STARTED_AT);
 }
@@ -381,6 +414,7 @@ function createPredictionRecord({
   amount,
   side = "YES",
   sharePrice,
+  houseMarginRate = DEFAULT_HOUSE_MARGIN_RATE,
   createdAt = new Date().toISOString()
 }) {
   const term = RANGE_TERMS.find((item) => item.id === termId) || RANGE_TERMS[0];
@@ -393,7 +427,10 @@ function createPredictionRecord({
     : normalizedSide === "YES"
       ? seedYesPriceForPreset(preset)
       : 1 - seedYesPriceForPreset(preset);
-  const shares = price > 0 ? usdtValue / price : 0;
+  const quote = shareQuote(usdtValue, normalizedSide, {
+    yesPrice: normalizedSide === "YES" ? price : 1 - price,
+    noPrice: normalizedSide === "NO" ? price : 1 - price
+  }, houseMarginRate);
 
   return {
     id: `range-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -409,7 +446,10 @@ function createPredictionRecord({
     amount: Number(amount),
     usdtValue,
     sharePrice: price,
-    shares,
+    houseMarginRate: quote.marginRate,
+    houseMarginAmount: quote.marginAmount,
+    netUsdtValue: quote.netAmount,
+    shares: quote.shares,
     status: "open",
     result: null,
     settlementPrice: null,
@@ -609,9 +649,8 @@ function renderAmountConversion() {
   const usdtValue = amountToUsdt(amount, selectedAsset);
   const pairedAsset = selectedAsset === "USDT" ? "STT" : "USDT";
   const pairedAmount = selectedAsset === "USDT" ? usdtToAsset(usdtValue, "STT") : usdtValue;
-  const sharePrice = priceForSide(selectedSide);
-  const shares = sharePrice > 0 ? usdtValue / sharePrice : 0;
-  els.rangeAmountConversion.textContent = `${formatAmount(usdtValue, "USDT")} buys ${formatShares(shares)} ${selectedSide} shares at ${formatSharePrice(sharePrice)} (${formatAmount(pairedAmount, pairedAsset)}).`;
+  const quote = shareQuote(usdtValue, selectedSide, selectedMarket(), currentHouseMarginRate(rangeState));
+  els.rangeAmountConversion.textContent = `${formatAmount(usdtValue, "USDT")} buys ${formatShares(quote.shares)} ${selectedSide} shares after ${(quote.marginRate * 100).toFixed(1).replace(/\.0$/, "")}% platform fee at ${formatSharePrice(quote.sharePrice)} (${formatAmount(pairedAmount, pairedAsset)}).`;
 }
 
 function renderTicketSummary() {
@@ -619,8 +658,7 @@ function renderTicketSummary() {
   const term = selectedTerm();
   const { lower, upper, amount } = currentInputs();
   const usdtValue = amountToUsdt(amount, selectedAsset);
-  const sharePrice = priceForSide(selectedSide);
-  const shares = sharePrice > 0 ? usdtValue / sharePrice : 0;
+  const quote = shareQuote(usdtValue, selectedSide, selectedMarket(), currentHouseMarginRate(rangeState));
   const settlementDate = resolutionDateForSelectedTerm();
   const isValidRange = Number.isFinite(lower) && Number.isFinite(upper) && lower < upper;
   const isValidAmount = usdtValue >= RANGE_MIN_USDT;
@@ -628,7 +666,7 @@ function renderTicketSummary() {
   els.heroRangeValue.textContent = isValidRange ? formatShortRange(lower, upper) : formatShortRange(preset.lower, preset.upper);
   els.heroTermValue.textContent = `${term.label} window`;
   els.rangeStatusPill.textContent = rangeState.marketStatus;
-  els.submitButton.textContent = `Buy ${selectedSide} ${formatSharePrice(sharePrice)}`;
+  els.submitButton.textContent = `Buy ${selectedSide} ${formatSharePrice(quote.sharePrice)}`;
 
   els.rangeTicketSummary.innerHTML = `
     <div class="scenario-result">
@@ -637,7 +675,13 @@ function renderTicketSummary() {
     </div>
     <div class="scenario-result">
       <span>Share estimate</span>
-      <strong>${formatShares(shares)} shares</strong>
+      <strong class="share-estimate-value">
+        ${formatShares(quote.shares)} shares
+        <button class="share-tooltip-trigger" type="button" aria-label="Share estimate calculation">?</button>
+        <span class="share-tooltip" role="tooltip">
+          ${formatUsdAmount(quote.grossAmount)} deposit - ${formatUsdAmount(quote.marginAmount)} platform fee (${(quote.marginRate * 100).toFixed(1).replace(/\.0$/, "")}%) = ${formatUsdAmount(quote.netAmount)} net. ${formatUsdAmount(quote.netAmount)} / ${formatUsdAmount(quote.sharePrice)} share price = ${formatShares(quote.shares)} shares.
+        </span>
+      </strong>
     </div>
     <div class="scenario-result">
       <span>Resolution</span>
@@ -839,6 +883,7 @@ function submitPrediction() {
   const usdtValue = amountToUsdt(amount, selectedAsset);
   const market = selectedMarket();
   const sharePrice = priceForSide(selectedSide, market);
+  const quote = shareQuote(usdtValue, selectedSide, market, currentHouseMarginRate(rangeState));
 
   if (!Number.isFinite(lower) || !Number.isFinite(upper) || lower >= upper) {
     showTradeError("Select a valid range market.");
@@ -861,14 +906,15 @@ function submitPrediction() {
     asset: selectedAsset,
     amount,
     side: selectedSide,
-    sharePrice
+    sharePrice,
+    houseMarginRate: currentHouseMarginRate(rangeState)
   });
 
   rangeState.predictions.push(prediction);
   saveRangeState();
   clearTradeError();
   renderAll();
-  showToast(`Bought ${formatShares(prediction.shares)} ${selectedSide} shares at ${formatSharePrice(sharePrice)}.`);
+  showToast(`Bought ${formatShares(prediction.shares)} ${selectedSide} shares after ${formatAmount(quote.marginAmount, "USDT")} platform fee.`);
 }
 
 function settleOpenPredictions(finalPrice) {
@@ -902,6 +948,21 @@ function settleOpenPredictions(finalPrice) {
   saveRangeState();
   renderAll();
   showToast(`Settled ${settledCount} open prediction${settledCount === 1 ? "" : "s"}.`);
+}
+
+function saveHouseMarginFromAdmin() {
+  const percent = Number(els.adminHouseMargin.value);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 50) {
+    showToast("Platform fee must be between 0% and 50%.");
+    els.adminHouseMargin.value = (currentHouseMarginRate(rangeState) * 100).toFixed(1).replace(/\.0$/, "");
+    return;
+  }
+
+  rangeState.houseMarginRate = percent / 100;
+  saveRangeState();
+  clearTradeError();
+  renderAll();
+  showToast(`Platform fee set to ${percent.toFixed(1).replace(/\.0$/, "")}%.`);
 }
 
 function bindEvents() {
@@ -957,9 +1018,12 @@ function bindEvents() {
     saveRangeState();
     renderAll();
   });
+  els.adminHouseMargin.addEventListener("input", saveHouseMarginFromAdmin);
+  els.adminHouseMargin.addEventListener("change", saveHouseMarginFromAdmin);
 
   els.adminForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    saveHouseMarginFromAdmin();
     settleOpenPredictions(els.adminFinalPrice.value);
   });
 }
@@ -968,6 +1032,7 @@ function init() {
   window.setRangeMarketView = setMarketView;
   els.rangeAmountInput.value = "1";
   els.adminMarketStatus.value = rangeState.marketStatus;
+  els.adminHouseMargin.value = (currentHouseMarginRate() * 100).toFixed(1).replace(/\.0$/, "");
   bindEvents();
   renderAll();
   clearInterval(resolutionTimer);
