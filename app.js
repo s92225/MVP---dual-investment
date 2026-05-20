@@ -5,14 +5,13 @@ const PRODUCTS = [
     choice: "Aggressive",
     userAction: "Deposit USDT",
     summary: "Deposit USDT and choose a lower STT accumulation price.",
-    comexReference: "Sell Put",
-    strike: 77.5,
+    strike: 72.5,
     exerciseDate: "25 Jun 2026",
-    modelPremium: 4.17,
-    rewardPerUnit: 2.71,
+    modelPremium: 3.67,
+    rewardPerUnit: 2.39,
     rewardUnit: "STT-equivalent",
-    periodYield: 0.0336,
-    apr: 0.272,
+    periodYield: 0.0316,
+    apr: 0.296,
     depositAsset: "USDT",
     primaryOutcome: "If silver stays above target, USDT principal returns with estimated yield.",
     conversionOutcome: "If silver falls to or below target, USDT is used to buy STT at the target price."
@@ -23,14 +22,13 @@ const PRODUCTS = [
     choice: "Balanced",
     userAction: "Deposit USDT",
     summary: "Deposit USDT and choose a lower STT accumulation price.",
-    comexReference: "Sell Put",
-    strike: 75,
+    strike: 70,
     exerciseDate: "25 Jun 2026",
-    modelPremium: 3.16,
-    rewardPerUnit: 2.05,
+    modelPremium: 2.676,
+    rewardPerUnit: 1.74,
     rewardUnit: "STT-equivalent",
-    periodYield: 0.0254,
-    apr: 0.206,
+    periodYield: 0.023,
+    apr: 0.216,
     depositAsset: "USDT",
     primaryOutcome: "If silver stays above target, USDT principal returns with estimated yield.",
     conversionOutcome: "If silver falls to or below target, USDT is used to buy STT at the target price."
@@ -41,14 +39,13 @@ const PRODUCTS = [
     choice: "Conservative",
     userAction: "Deposit USDT",
     summary: "Deposit USDT and choose a lower STT accumulation price.",
-    comexReference: "Sell Put",
-    strike: 70,
+    strike: 65,
     exerciseDate: "25 Jun 2026",
-    modelPremium: 1.64,
-    rewardPerUnit: 1.06,
+    modelPremium: 1.335,
+    rewardPerUnit: 0.87,
     rewardUnit: "STT-equivalent",
-    periodYield: 0.0132,
-    apr: 0.107,
+    periodYield: 0.0115,
+    apr: 0.108,
     depositAsset: "USDT",
     primaryOutcome: "If silver stays above target, USDT principal returns with estimated yield.",
     conversionOutcome: "If silver falls to or below target, USDT is used to buy STT at the target price."
@@ -59,14 +56,13 @@ const PRODUCTS = [
     choice: "Aggressive",
     userAction: "Stake STT",
     summary: "Stake STT and choose a higher target sell price.",
-    comexReference: "Sell Call",
-    strike: 85,
+    strike: 77.5,
     exerciseDate: "25 Jun 2026",
-    modelPremium: 4.1,
-    rewardPerUnit: 2.67,
+    modelPremium: 4.557,
+    rewardPerUnit: 2.96,
     rewardUnit: "STT",
-    periodYield: 0.033,
-    apr: 0.268,
+    periodYield: 0.0392,
+    apr: 0.367,
     depositAsset: "STT",
     primaryOutcome: "If silver stays below target, STT principal returns with estimated yield.",
     conversionOutcome: "If silver reaches or exceeds target, STT is sold at the target price."
@@ -77,14 +73,13 @@ const PRODUCTS = [
     choice: "Balanced",
     userAction: "Stake STT",
     summary: "Stake STT and choose a higher target sell price.",
-    comexReference: "Sell Call",
-    strike: 90,
+    strike: 80,
     exerciseDate: "25 Jun 2026",
-    modelPremium: 2.61,
-    rewardPerUnit: 1.7,
+    modelPremium: 3.721,
+    rewardPerUnit: 2.42,
     rewardUnit: "STT",
-    periodYield: 0.021,
-    apr: 0.17,
+    periodYield: 0.032,
+    apr: 0.3,
     depositAsset: "STT",
     primaryOutcome: "If silver stays below target, STT principal returns with estimated yield.",
     conversionOutcome: "If silver reaches or exceeds target, STT is sold at the target price."
@@ -95,30 +90,29 @@ const PRODUCTS = [
     choice: "Conservative",
     userAction: "Stake STT",
     summary: "Stake STT and choose a higher target sell price.",
-    comexReference: "Sell Call",
-    strike: 95,
+    strike: 85,
     exerciseDate: "25 Jun 2026",
-    modelPremium: 1.6,
-    rewardPerUnit: 1.04,
+    modelPremium: 2.5,
+    rewardPerUnit: 1.63,
     rewardUnit: "STT",
-    periodYield: 0.0129,
-    apr: 0.105,
+    periodYield: 0.0215,
+    apr: 0.201,
     depositAsset: "STT",
     primaryOutcome: "If silver stays below target, STT principal returns with estimated yield.",
     conversionOutcome: "If silver reaches or exceeds target, STT is sold at the target price."
   }
 ];
 
-const STORAGE_KEY = "silvertimes-dual-investment-positions";
+const STORAGE_KEY = "silvertimes-earn-positions";
 const SPOT_PRICE = {
-  value: 87.13,
+  value: 75.5,
   unit: "USD / oz",
-  asOf: "May 11, 2026 10:59 PM ET",
-  source: "Bullion.com"
+  asOf: "May 18, 2026 12:29 PM HKT",
+  source: "Barchart"
 };
 const STT_PER_SPOT_UNIT = 1;
-const CHART_BOUNDS = { floor: 60, ceiling: 110 };
-const CHART_PATH_PRICES = [92, 86, 88, 82, 78, 76, 83, SPOT_PRICE.value];
+const CHART_BOUNDS = { floor: 55, ceiling: 95 };
+const CHART_PATH_PRICES = [80, 77, 78, 74, 71, 70, 73, SPOT_PRICE.value];
 const EXPIRY_APR_MULTIPLIERS = {
   "term-1m": 1,
   "term-3m": 0.82,
@@ -141,6 +135,8 @@ let toastTimer = null;
 let depositAmountValue = "";
 let selectedAmountAsset = "USDT";
 let pendingOrder = null;
+let confirmCountdownTimer = null;
+let confirmCountdownRemaining = 0;
 const scenarioPrices = {};
 
 const productList = document.querySelector("#productList");
@@ -154,6 +150,7 @@ const finalPriceInput = document.querySelector("#finalPriceInput");
 const walletButton = document.querySelector("#walletButton");
 const clearPositionsButton = document.querySelector("#clearPositionsButton");
 const toast = document.querySelector("#toast");
+const heroApr = document.querySelector("#heroApr");
 const heroTerm = document.querySelector("#heroTerm");
 const expiryList = document.querySelector("#expiryList");
 const spotPricePill = document.querySelector("#spotPricePill");
@@ -340,6 +337,42 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2600);
 }
 
+function stopConfirmCountdown() {
+  clearInterval(confirmCountdownTimer);
+  confirmCountdownTimer = null;
+  confirmCountdownRemaining = 0;
+  confirmDepositButton.textContent = "Confirm";
+  confirmDepositButton.disabled = true;
+}
+
+function startConfirmCountdown() {
+  stopConfirmCountdown();
+  confirmCountdownRemaining = 5;
+  confirmDepositButton.textContent = `Confirm (${confirmCountdownRemaining}s)`;
+  confirmDepositButton.disabled = true;
+
+  confirmCountdownTimer = setInterval(() => {
+    confirmCountdownRemaining -= 1;
+
+    if (confirmCountdownRemaining <= 0) {
+      clearInterval(confirmCountdownTimer);
+      confirmCountdownTimer = null;
+      confirmDepositButton.textContent = "Confirm";
+      confirmDepositButton.disabled = !confirmTerms.checked;
+      return;
+    }
+
+    confirmDepositButton.textContent = `Confirm (${confirmCountdownRemaining}s)`;
+  }, 1000);
+}
+
+function closeConfirmModal() {
+  pendingOrder = null;
+  confirmTerms.checked = false;
+  stopConfirmCountdown();
+  confirmModal.hidden = true;
+}
+
 function renderTabs() {
   document.querySelectorAll(".segment").forEach((button) => {
     const isActive = button.dataset.mode === currentMode;
@@ -349,6 +382,7 @@ function renderTabs() {
 
   renderExpiryOptions();
   heroTerm.textContent = "1M / 3M / 6M";
+  heroApr.textContent = formatPercent(Math.max(...PRODUCTS.map((product) => productApr(product))));
 }
 
 function renderProductList() {
@@ -374,7 +408,6 @@ function renderProductList() {
         <button class="product-row${selectedClass}" type="button" data-product-id="${product.id}">
           <span class="product-title">
             <strong>${product.choice}</strong>
-            <span>${product.comexReference}</span>
           </span>
           <span class="metric">
             <span class="metric-label">Strike</span>
@@ -448,6 +481,7 @@ function quoteForDepositAmount(product, depositAmount) {
     const rewardValue = amount * adjustedYield;
     const notionalStt = amount / sttReferencePrice();
     return {
+      depositAmount: amount,
       rewardValue,
       rewardAsset: "USDT value",
       earningPerStt: notionalStt ? rewardValue / notionalStt : 0,
@@ -461,6 +495,7 @@ function quoteForDepositAmount(product, depositAmount) {
   const targetUsdtPerStt = sttReferencePrice(product.strike);
   const rewardValue = amount * adjustedYield * targetUsdtPerStt;
   return {
+    depositAmount: amount,
     rewardValue,
     rewardAsset: "USDT value",
     earningPerStt: rewardValue / amount,
@@ -534,6 +569,26 @@ function scenarioOutcome(product, quote, price) {
   };
 }
 
+function scenarioBreakdown(product, quote, outcome) {
+  if (!quote) {
+    return "Enter an amount to preview principal, earning, and settlement conversion.";
+  }
+
+  if (product.mode === "buy-low" && outcome.tone === "convert") {
+    return `${formatUsd(quote.depositAmount)} USDT principal + ${formatUsd(quote.rewardValue)} earning, converted at ${formatUsd(product.strike)} = ${formatTokenAmount(quote.conversionAmount, "STT")}.`;
+  }
+
+  if (product.mode === "buy-low") {
+    return `${formatUsd(quote.depositAmount)} USDT principal + ${formatUsd(quote.rewardValue)} earning returns as ${formatTokenAmount(quote.noConversionAmount, "USDT")}.`;
+  }
+
+  if (outcome.tone === "convert") {
+    return `${formatTokenAmount(quote.depositAmount, "STT")} principal sold at ${formatUsd(product.strike)} + ${formatUsd(quote.rewardValue)} earning = ${formatTokenAmount(quote.conversionAmount, "USDT")}.`;
+  }
+
+  return `${formatTokenAmount(quote.depositAmount, "STT")} principal + ${formatUsd(quote.rewardValue)} earning value returns as ${formatTokenAmount(quote.noConversionAmount, "STT")}.`;
+}
+
 function renderScenarioChart(product, quote, scenarioPrice) {
   const bounds = scenarioBounds(product);
   const targetY = priceToY(product.strike, bounds);
@@ -544,6 +599,7 @@ function renderScenarioChart(product, quote, scenarioPrice) {
   const scenarioX = xPoints[8];
   const rewardLabel = quote ? `~${formatUsd(quote.rewardValue)}` : "-";
   const outcome = scenarioOutcome(product, quote, scenarioPrice);
+  const breakdown = scenarioBreakdown(product, quote, outcome);
   const prices = [...CHART_PATH_PRICES, scenarioPrice];
   const points = prices.map((price, index) => {
     const x = xPoints[index];
@@ -587,6 +643,7 @@ function renderScenarioChart(product, quote, scenarioPrice) {
         <span>${outcome.label}</span>
         <strong>${outcome.value}</strong>
       </div>
+      <p class="scenario-breakdown">${breakdown}</p>
     </div>
   `;
 }
@@ -600,6 +657,7 @@ function updateScenarioView(product, quote, price) {
   const settleDot = quoteBox.querySelector(".chart-settle-dot");
   const chartPrice = quoteBox.querySelector(".chart-price");
   const result = quoteBox.querySelector(".scenario-result");
+  const breakdown = quoteBox.querySelector(".scenario-breakdown");
   const chart = quoteBox.querySelector(".scenario-chart");
   const path = quoteBox.querySelector(".chart-path");
 
@@ -631,6 +689,10 @@ function updateScenarioView(product, quote, price) {
       <span>${outcome.label}</span>
       <strong>${outcome.value}</strong>
     `;
+  }
+
+  if (breakdown) {
+    breakdown.textContent = scenarioBreakdown(product, quote, outcome);
   }
 }
 
@@ -802,12 +864,12 @@ function handleDeposit(event, product) {
     </span>
   `;
   confirmTerms.checked = false;
-  confirmDepositButton.disabled = true;
+  stopConfirmCountdown();
   confirmModal.hidden = false;
 }
 
 function confirmPendingOrder() {
-  if (!pendingOrder || !confirmTerms.checked) {
+  if (!pendingOrder || !confirmTerms.checked || confirmCountdownTimer || confirmCountdownRemaining > 0) {
     showToast("Review and accept the terms first.");
     return;
   }
@@ -832,10 +894,9 @@ function confirmPendingOrder() {
   positions.unshift(position);
   savePositions(positions);
   renderPositions();
-  renderSettlementProducts();
+  renderSettlementTerms();
   depositAmountValue = "";
-  pendingOrder = null;
-  confirmModal.hidden = true;
+  closeConfirmModal();
   renderDetail();
   showToast("Demo position created.");
 }
@@ -917,27 +978,27 @@ function renderPositions() {
     .join("");
 }
 
-function renderSettlementProducts() {
-  settlementProduct.innerHTML = PRODUCTS.map((product) => {
-    const label = `${modeLabel(product.mode)} ${product.choice} - ${formatUsd(product.strike)}`;
-    return `<option value="${product.id}">${label}</option>`;
+function renderSettlementTerms() {
+  settlementProduct.innerHTML = EXPIRY_FAMILIES.monthly.map((expiry) => {
+    return `<option value="${expiry.id}">${expiry.shortLabel} silver price</option>`;
   }).join("");
 }
 
 function handleSettlement(event) {
   event.preventDefault();
-  const productId = settlementProduct.value;
+  const expiryId = settlementProduct.value;
   const finalPrice = Number(finalPriceInput.value);
 
   if (!finalPrice || finalPrice <= 0) {
-    showToast("Enter a final reference price.");
+    showToast("Enter a silver price.");
     return;
   }
 
   const positions = loadPositions();
   let settledCount = 0;
   const updated = positions.map((position) => {
-    if (position.productId !== productId || position.status !== "active") {
+    const positionExpiryId = position.expiryId || "term-1m";
+    if (positionExpiryId !== expiryId || position.status !== "active") {
       return position;
     }
 
@@ -951,7 +1012,9 @@ function handleSettlement(event) {
 
   savePositions(updated);
   renderPositions();
-  showToast(settledCount ? `${settledCount} position(s) settled.` : "No active positions for that product.");
+  const selectedTerm = EXPIRY_FAMILIES.monthly.find((expiry) => expiry.id === expiryId);
+  const termLabel = selectedTerm ? selectedTerm.shortLabel : "selected term";
+  showToast(settledCount ? `${termLabel} silver price settled ${settledCount} position(s).` : `No active ${termLabel} positions.`);
 }
 
 function handleClaim(positionId) {
@@ -1032,20 +1095,23 @@ function wireEvents() {
   });
 
   confirmTerms.addEventListener("change", () => {
-    confirmDepositButton.disabled = !confirmTerms.checked;
+    if (confirmTerms.checked) {
+      startConfirmCountdown();
+      return;
+    }
+
+    stopConfirmCountdown();
   });
 
   cancelConfirmButton.addEventListener("click", () => {
-    pendingOrder = null;
-    confirmModal.hidden = true;
+    closeConfirmModal();
   });
 
   confirmDepositButton.addEventListener("click", confirmPendingOrder);
 
   confirmModal.addEventListener("click", (event) => {
     if (event.target === confirmModal) {
-      pendingOrder = null;
-      confirmModal.hidden = true;
+      closeConfirmModal();
     }
   });
 
@@ -1060,7 +1126,7 @@ function render() {
   renderProductList();
   renderDetail();
   renderPositions();
-  renderSettlementProducts();
+  renderSettlementTerms();
   syncStickyControls();
 }
 

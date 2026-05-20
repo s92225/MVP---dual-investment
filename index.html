@@ -4,18 +4,19 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>STT Smart Earn</title>
-    <link rel="stylesheet" href="styles.css?v=20260512-width">
+    <link rel="stylesheet" href="styles.css?v=20260520-unified-header">
   </head>
   <body>
     <header class="topbar" aria-label="Primary">
-      <a class="brand" href="#dashboard" aria-label="SilverTimes Dual Investment">
+      <a class="brand" href="#dashboard" aria-label="SilverTimes Earn">
         <img src="https://www.silvertimes.io/ST_LOGO_DARK@2x.png" alt="SilverTimes">
       </a>
       <nav class="navlinks" aria-label="Sections">
-        <a href="#dashboard">Products</a>
-        <a href="#positions">Positions</a>
-        <a href="#admin">Admin</a>
+        <a href="#dashboard">Earn</a>
         <a href="silver-pulse.html">Silver Pulse</a>
+        <a href="range-prediction.html">Range Prediction</a>
+        <a href="#positions">My Activity</a>
+        <a href="#admin">Admin</a>
       </nav>
       <div id="spotPriceHeader" class="spot-header" aria-live="polite"></div>
       <button id="walletButton" class="primary-button" type="button">Connect Wallet</button>
@@ -27,16 +28,17 @@
           <div id="spotPricePill" class="spot-pill" aria-live="polite"></div>
           <h1 id="pageTitle">STT Smart Earn</h1>
           <div class="hero-actions">
-            <a class="primary-button" href="#products">Start Investing</a>
+            <a class="primary-button" href="#products">Start Earning</a>
             <a class="ghost-button" href="#positions">View Positions</a>
             <a class="ghost-button" href="silver-pulse.html">Play Silver Pulse</a>
+            <a class="ghost-button" href="range-prediction.html">Open Range Prediction</a>
           </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
           <div class="orbital-card large">
             <span>Best APY</span>
-            <strong id="heroApr">27.2%</strong>
-            <small>Source preset</small>
+            <strong id="heroApr">36.7%</strong>
+            <small>Barchart bid</small>
           </div>
           <div class="orbital-card">
             <span>Products</span>
@@ -50,7 +52,7 @@
         </div>
       </section>
 
-      <section id="products" class="workspace" aria-label="Dual investment products">
+      <section id="products" class="workspace" aria-label="Earn products">
         <div class="section-heading">
           <div>
             <h2>Choose strategy and term</h2>
@@ -116,18 +118,18 @@
             <p class="eyebrow">Settlement Mock</p>
             <h2 id="adminTitle">Admin Console</h2>
           </div>
-          <p class="summary-text">Settle local demo positions with a final reference price.</p>
+          <p class="summary-text">Set 1M, 3M, or 6M silver prices for local demo settlement.</p>
         </div>
         <form id="settlementForm" class="admin-form">
           <div class="field">
-            <label for="settlementProduct">Product</label>
+            <label for="settlementProduct">Settlement Term</label>
             <select id="settlementProduct"></select>
           </div>
           <div class="field">
-            <label for="finalPriceInput">Final Reference Price</label>
+            <label for="finalPriceInput">Silver Price</label>
             <input id="finalPriceInput" type="number" min="0" step="0.01" placeholder="Example: 82.50">
           </div>
-          <button class="ghost-button" type="submit">Settle Product</button>
+          <button class="ghost-button" type="submit">Set Silver Price</button>
         </form>
       </section>
     </main>
@@ -136,7 +138,7 @@
     <div id="confirmModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" hidden>
       <div class="confirm-card">
         <p class="eyebrow">Review order</p>
-        <h3 id="confirmTitle">Confirm dual investment</h3>
+        <h3 id="confirmTitle">Confirm Earn order</h3>
         <div id="confirmSummary" class="confirm-summary"></div>
         <label class="confirm-check">
           <input id="confirmTerms" type="checkbox">

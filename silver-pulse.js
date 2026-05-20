@@ -60,12 +60,13 @@ const MONTHLY_SILVER_PRICES = [
   { label: "May 12", value: 78.42 }
 ];
 
-let pulseState = loadState();
+let pulseState = normalizeState(loadState());
 let walletConnected = localStorage.getItem(PULSE_WALLET_KEY) === "true";
 let pulseToastTimer = null;
 let countdownTimer = null;
 let monthlyChartState = null;
 let celebrationTimer = null;
+let selectedLeaderboardWeekKey = null;
 
 const els = {
   walletButton: document.querySelector("#pulseWalletButton"),
@@ -93,6 +94,7 @@ const els = {
   roundDetailStats: document.querySelector("#roundDetailStats"),
   leaderboardPanel: document.querySelector("#leaderboardPanel"),
   leaderboardSummary: document.querySelector("#leaderboardSummary"),
+  leaderboardWeekSelect: document.querySelector("#leaderboardWeekSelect"),
   roundHistoryPanel: document.querySelector("#roundHistoryPanel"),
   profilePanel: document.querySelector("#profilePanel"),
   resetPulseButton: document.querySelector("#resetPulseButton"),
@@ -115,7 +117,7 @@ const els = {
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(PULSE_STORAGE_KEY));
-    if (parsed && Array.isArray(parsed.rounds) && Array.isArray(parsed.predictions) && Array.isArray(parsed.rewards)) {
+    if (isValidStoredState(parsed)) {
       return parsed;
     }
   } catch {
@@ -129,6 +131,71 @@ function saveState(state = pulseState) {
   localStorage.setItem(PULSE_STORAGE_KEY, JSON.stringify(state));
 }
 
+function isValidStoredState(state) {
+  return Boolean(
+    state &&
+    Array.isArray(state.rounds) &&
+    Array.isArray(state.predictions) &&
+    Array.isArray(state.rewards) &&
+    state.rounds.length &&
+    state.rounds.every(isValidStoredRound)
+  );
+}
+
+function isValidStoredRound(round) {
+  return Boolean(
+    round &&
+    typeof round.id === "string" &&
+    typeof round.roundDate === "string" &&
+    typeof round.status === "string" &&
+    typeof round.startTime === "string" &&
+    typeof round.predictionCutoffTime === "string" &&
+    typeof round.settlementTime === "string" &&
+    Number.isFinite(Number(round.openingPrice)) &&
+    Number.isFinite(Number(round.currentPrice))
+  );
+}
+
+function normalizeState(state) {
+  if (!isValidStoredState(state)) {
+    return createDefaultState();
+  }
+
+  const today = nearestTradingDate(new Date());
+  const demoPastRounds = createPastRounds(today, 12);
+  const existingRoundIds = new Set(state.rounds.map((round) => round.id));
+  const nextState = {
+    ...state,
+    rounds: [...state.rounds],
+    predictions: [...state.predictions],
+    rewards: [...state.rewards]
+  };
+
+  demoPastRounds.forEach((round) => {
+    if (existingRoundIds.has(round.id)) {
+      return;
+    }
+
+    const roundPredictions = seedPastPredictions(round, round.winningSide);
+    nextState.rounds.push(round);
+    nextState.predictions.push(...roundPredictions);
+    nextState.rewards.push(...createDemoRewardsForRound(round, roundPredictions));
+    existingRoundIds.add(round.id);
+  });
+
+  nextState.rounds.forEach((round) => {
+    const hasReward = nextState.rewards.some((reward) => reward.roundId === round.id);
+    if (round.status !== "settled" || hasReward || !round.winningSide || round.winningSide === "FLAT") {
+      return;
+    }
+
+    nextState.rewards.push(...createDemoRewardsForRound(round, predictionsForRound(round.id, nextState)));
+  });
+
+  nextState.rounds.sort((first, second) => second.roundDate.localeCompare(first.roundDate));
+  return nextState;
+}
+
 function createDefaultState() {
   const today = nearestTradingDate(new Date());
   const activeRound = createRound(today, {
@@ -136,20 +203,7 @@ function createDefaultState() {
     currentPrice: 78.42,
     status: "open"
   });
-  const pastOne = createRound(previousTradingDate(today), {
-    openingPrice: 78,
-    currentPrice: 79.1,
-    closingPrice: 79.1,
-    winningSide: "UP",
-    status: "settled"
-  });
-  const pastTwo = createRound(previousTradingDate(previousTradingDate(today)), {
-    openingPrice: 78,
-    currentPrice: 77.35,
-    closingPrice: 77.35,
-    winningSide: "DOWN",
-    status: "settled"
-  });
+  const pastRounds = createPastRounds(today, 12);
 
   const predictions = [
     ...seedPredictions(activeRound, [
@@ -176,31 +230,76 @@ function createDefaultState() {
       ["UP", 298, 1],
       ["UP", 337, 0]
     ]),
-    ...seedPastPredictions(pastOne, "UP"),
-    ...seedPastPredictions(pastTwo, "DOWN")
+    ...pastRounds.flatMap((round) => seedPastPredictions(round, round.winningSide))
   ];
-  const paidDemoPrediction = predictions.find((prediction) => prediction.roundId === pastOne.id && prediction.wallet === DEMO_WALLET);
-
-  const rewards = [
-    {
-      id: `RW-${pastOne.id}-${DEMO_WALLET.slice(-6)}`,
-      roundId: pastOne.id,
-      wallet: DEMO_WALLET,
-      rank: 3,
-      rewardAmountCents: 200,
-      score: paidDemoPrediction ? calculateScore(paidDemoPrediction, pastOne) : 0,
-      status: "paid",
-      createdAt: pastOne.settlementTime,
-      updatedAt: pastOne.settlementTime
-    }
-  ];
+  const rewards = pastRounds.flatMap((round) => {
+    return createDemoRewardsForRound(round, predictions.filter((prediction) => prediction.roundId === round.id));
+  });
 
   return {
     version: 1,
-    rounds: [activeRound, pastOne, pastTwo],
+    rounds: [activeRound, ...pastRounds],
     predictions,
     rewards
   };
+}
+
+function createPastRounds(today, count) {
+  const rounds = [];
+  let cursor = today;
+
+  for (let index = 0; index < count; index += 1) {
+    cursor = previousTradingDate(cursor);
+    const winningSide = index % 3 === 1 ? "DOWN" : "UP";
+    const openingPrice = 78 + ((index % 5) - 2) * 0.28;
+    const move = 0.45 + (index % 4) * 0.17;
+    const closingPrice = winningSide === "UP" ? openingPrice + move : openingPrice - move;
+
+    rounds.push(createRound(cursor, {
+      openingPrice,
+      currentPrice: closingPrice,
+      closingPrice,
+      winningSide,
+      status: "settled",
+      maxWinners: 5
+    }));
+  }
+
+  return rounds;
+}
+
+function createDemoRewardsForRound(round, predictions) {
+  const winners = predictions
+    .filter((prediction) => prediction.side === round.winningSide && round.winningSide !== "FLAT")
+    .map((prediction) => ({
+      prediction,
+      score: calculateScore(prediction, round)
+    }))
+    .sort(compareScoredPredictions)
+    .slice(0, round.maxWinners);
+
+  if (!winners.length) {
+    return [];
+  }
+
+  const baseCents = Math.floor(round.rewardPoolCents / winners.length);
+  let remainder = round.rewardPoolCents - baseCents * winners.length;
+
+  return winners.map((entry, index) => {
+    const extraCent = remainder > 0 ? 1 : 0;
+    remainder -= extraCent;
+    return {
+      id: `RW-${round.id}-${entry.prediction.wallet.slice(-6)}-${index + 1}`,
+      roundId: round.id,
+      wallet: entry.prediction.wallet,
+      rank: index + 1,
+      rewardAmountCents: baseCents + extraCent,
+      score: entry.score,
+      status: "paid",
+      createdAt: round.settledAt || round.settlementTime,
+      updatedAt: round.settledAt || round.settlementTime
+    };
+  });
 }
 
 function createRound(date, overrides = {}) {
@@ -790,43 +889,108 @@ function renderRoundDetails(round) {
   document.querySelector("#streakCountValue").textContent = `${scorePreview.currentWinStreak} win${scorePreview.currentWinStreak === 1 ? "" : "s"}`;
 }
 
-function renderLeaderboard(round) {
-  const status = effectiveStatus(round);
-  const sentiment = sentimentForRound(round);
+function leaderboardWeeks(state = pulseState) {
+  const groups = new Map();
+  const settledRounds = state.rounds
+    .filter((round) => round.status === "settled")
+    .sort((first, second) => second.roundDate.localeCompare(first.roundDate));
 
-  if (status !== "settled") {
-    els.leaderboardSummary.textContent = "Final winners appear after settlement.";
-    els.leaderboardPanel.innerHTML = `
-      <div class="empty-state">
-        ${sentiment.total} participant${sentiment.total === 1 ? "" : "s"} entered. ${sentiment.upPercent}% chose UP and ${sentiment.downPercent}% chose DOWN. Winner ranking is hidden until settlement.
-      </div>
-    `;
+  settledRounds.forEach((round) => {
+    const key = weekKeyForDateKey(round.roundDate);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label: weekLabel(key),
+        rounds: []
+      });
+    }
+    groups.get(key).rounds.push(round);
+  });
+
+  return Array.from(groups.values()).sort((first, second) => second.key.localeCompare(first.key));
+}
+
+function weekKeyForDateKey(dateKey) {
+  const date = dateFromDateKey(dateKey);
+  const day = date.getDay();
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  return localDateKey(addDays(date, -daysFromMonday));
+}
+
+function weekLabel(weekKey) {
+  const start = dateFromDateKey(weekKey);
+  const end = addDays(start, 4);
+  const formatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
+}
+
+function dateFromDateKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function renderLeaderboard(round) {
+  const weeks = leaderboardWeeks();
+
+  if (!weeks.length) {
+    els.leaderboardSummary.textContent = "No settled rounds yet.";
+    els.leaderboardWeekSelect.innerHTML = `<option value="">No weeks</option>`;
+    els.leaderboardWeekSelect.disabled = true;
+    els.leaderboardPanel.innerHTML = `<div class="empty-state">Winners will appear after the first settled round.</div>`;
     return;
   }
 
-  const rows = leaderboardRows(round);
-  const winners = rows.filter((row) => row.reward);
-  els.leaderboardSummary.textContent = winners.length
-    ? `${winners.length} winner${winners.length === 1 ? "" : "s"} share ${formatUsdtFromCents(round.rewardPoolCents)}.`
-    : "No correct predictions. No payout recorded.";
+  if (!selectedLeaderboardWeekKey || !weeks.some((week) => week.key === selectedLeaderboardWeekKey)) {
+    selectedLeaderboardWeekKey = weeks[0].key;
+  }
 
-  if (!rows.length) {
-    els.leaderboardPanel.innerHTML = `<div class="empty-state">No predictions for this round.</div>`;
+  els.leaderboardWeekSelect.disabled = false;
+  els.leaderboardWeekSelect.innerHTML = weeks
+    .map((week) => `<option value="${week.key}"${week.key === selectedLeaderboardWeekKey ? " selected" : ""}>${week.label}</option>`)
+    .join("");
+
+  const selectedWeek = weeks.find((week) => week.key === selectedLeaderboardWeekKey) || weeks[0];
+  const winners = selectedWeek.rounds.flatMap((settledRound) => {
+    return leaderboardRows(settledRound)
+      .filter((row) => row.reward)
+      .map((row) => ({ ...row, round: settledRound }));
+  });
+
+  els.leaderboardSummary.textContent = winners.length
+    ? `${winners.length} paid winner${winners.length === 1 ? "" : "s"} across ${selectedWeek.rounds.length} settled trading day${selectedWeek.rounds.length === 1 ? "" : "s"}.`
+    : `No paid winners for ${selectedWeek.label}.`;
+
+  if (!winners.length) {
+    els.leaderboardPanel.innerHTML = `<div class="empty-state">No winners recorded for ${selectedWeek.label}.</div>`;
     return;
   }
 
   els.leaderboardPanel.innerHTML = `
-    <div class="pulse-table">
+    <div class="pulse-table weekly-winners-table">
       <div class="pulse-table-row pulse-table-head">
+        <span>Date</span>
         <span>Rank</span>
         <span>User</span>
-        <span>Prediction</span>
-        <span>Submitted</span>
-        <span>Result</span>
+        <span>Side</span>
         <span>Score</span>
         <span>Reward</span>
+        <span>Status</span>
       </div>
-      ${rows.map((row) => renderLeaderboardRow(row)).join("")}
+      ${winners.map((row) => renderWeeklyWinnerRow(row)).join("")}
+    </div>
+  `;
+}
+
+function renderWeeklyWinnerRow(row) {
+  return `
+    <div class="pulse-table-row is-winner">
+      <span>${row.round.roundDate}</span>
+      <span>#${row.reward.rank}</span>
+      <span>${shortWallet(row.prediction.wallet)}</span>
+      <span>${row.prediction.side}</span>
+      <span>${row.score}</span>
+      <span>${formatUsdtFromCents(row.reward.rewardAmountCents)}</span>
+      <span>${row.reward.status}</span>
     </div>
   `;
 }
@@ -1302,6 +1466,10 @@ function wireEvents() {
   els.settlePulseButton.addEventListener("click", settleActiveRound);
   els.markRewardsApprovedButton.addEventListener("click", () => markActiveRewards("approved"));
   els.markRewardsPaidButton.addEventListener("click", () => markActiveRewards("paid"));
+  els.leaderboardWeekSelect.addEventListener("change", () => {
+    selectedLeaderboardWeekKey = els.leaderboardWeekSelect.value;
+    renderLeaderboard(getActiveRound());
+  });
   els.monthlySilverChart.addEventListener("pointermove", updateMonthlyChartHover);
   els.monthlySilverChart.addEventListener("pointerleave", hideMonthlyChartHover);
   els.monthlySilverChart.addEventListener("mousemove", updateMonthlyChartHover);
