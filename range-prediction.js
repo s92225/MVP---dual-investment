@@ -91,6 +91,7 @@ let selectedSide = "YES";
 let selectedMarketView = "chart";
 let rangeToastTimer = null;
 let resolutionTimer = null;
+let pendingRangeOrder = null;
 
 const els = {
   walletButton: document.querySelector("#rangeWalletButton"),
@@ -126,6 +127,10 @@ const els = {
   adminHouseMargin: document.querySelector("#adminHouseMargin"),
   adminFinalPrice: document.querySelector("#adminFinalPrice"),
   adminMarketStatus: document.querySelector("#adminMarketStatus"),
+  confirmModal: document.querySelector("#rangeConfirmModal"),
+  confirmSummary: document.querySelector("#rangeConfirmSummary"),
+  cancelConfirmButton: document.querySelector("#cancelRangePredictionButton"),
+  confirmBuyButton: document.querySelector("#confirmRangePredictionButton"),
   toast: document.querySelector("#rangeToast")
 };
 
@@ -275,10 +280,26 @@ function formatUsdAmount(value) {
   })}`;
 }
 
+function formatSignedUsdAmount(value) {
+  const amount = Number(value);
+  const sign = amount >= 0 ? "+" : "-";
+  return `${sign}$${Math.abs(amount).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+}
+
+function formatRewardAmount(value) {
+  const amount = Number(value);
+  return formatUsdAmount(Number.isFinite(amount) && amount >= 0 ? amount : 0.01);
+}
+
 function formatShares(value) {
-  return Number(value).toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4
+  const amount = Number(value);
+  const roundedUp = Number.isFinite(amount) ? Math.ceil(amount * 10) / 10 : 0;
+  return roundedUp.toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
   });
 }
 
@@ -371,6 +392,53 @@ function shareQuote(usdtValue, side = selectedSide, market = selectedMarket(), m
   };
 }
 
+function potentialRewardForQuote(quote) {
+  if (!quote || !Number.isFinite(Number(quote.shares)) || !Number.isFinite(Number(quote.grossAmount))) {
+    return 0;
+  }
+
+  return Number(quote.shares) - Number(quote.grossAmount);
+}
+
+function potentialRewardTooltip(quote, potentialReward) {
+  const payoutValue = Number(quote?.shares || 0);
+  const grossAmount = Number(quote?.grossAmount || 0);
+  const rawReward = Number.isFinite(Number(potentialReward)) ? Number(potentialReward) : payoutValue - grossAmount;
+  const rawRewardLabel = rawReward >= 0 ? formatUsdAmount(rawReward) : `-${formatUsdAmount(Math.abs(rawReward))}`;
+  const floorNote = rawReward < 0 ? " Negative rewards display as $0.01." : "";
+
+  return `If your prediction wins, payout is ${formatUsdAmount(payoutValue)}. ${formatUsdAmount(payoutValue)} payout - ${formatUsdAmount(grossAmount)} participation = ${rawRewardLabel} potential reward.${floorNote}`;
+}
+
+function unrealisedEarningForPrediction(prediction) {
+  if (!prediction || prediction.status !== "open") {
+    return null;
+  }
+
+  const market = marketForPreset(prediction.presetId);
+  const currentSharePrice = priceForSide(prediction.side || "YES", market);
+  const currentValue = Number(prediction.shares || 0) * currentSharePrice;
+  return currentValue - Number(prediction.usdtValue || 0);
+}
+
+function netValueForPrediction(prediction) {
+  if (!prediction) {
+    return 0;
+  }
+
+  if (prediction.status === "settled") {
+    return Number(prediction.payoutUsdt || 0);
+  }
+
+  const market = marketForPreset(prediction.presetId);
+  const currentSharePrice = priceForSide(prediction.side || "YES", market);
+  return Number(prediction.shares || 0) * currentSharePrice;
+}
+
+function portfolioNetValue(predictions) {
+  return predictions.reduce((sum, prediction) => sum + netValueForPrediction(prediction), 0);
+}
+
 function resolutionDateForSelectedTerm() {
   return settlementDateForTerm(selectedTerm(), RANGE_SESSION_STARTED_AT);
 }
@@ -386,12 +454,13 @@ function formatCountdown(targetDate) {
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
+  const padTime = (value) => String(value).padStart(2, "0");
 
   if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    return `${days}D ${hours}H`;
   }
 
-  return `${hours}h ${minutes}m ${seconds}s`;
+  return `${padTime(hours)}:${padTime(minutes)}:${padTime(seconds)}`;
 }
 
 function currentInputs() {
@@ -646,11 +715,7 @@ function renderAmountConversion() {
     return;
   }
 
-  const usdtValue = amountToUsdt(amount, selectedAsset);
-  const pairedAsset = selectedAsset === "USDT" ? "STT" : "USDT";
-  const pairedAmount = selectedAsset === "USDT" ? usdtToAsset(usdtValue, "STT") : usdtValue;
-  const quote = shareQuote(usdtValue, selectedSide, selectedMarket(), currentHouseMarginRate(rangeState));
-  els.rangeAmountConversion.textContent = `${formatAmount(usdtValue, "USDT")} buys ${formatShares(quote.shares)} ${selectedSide} shares after ${(quote.marginRate * 100).toFixed(1).replace(/\.0$/, "")}% platform fee at ${formatSharePrice(quote.sharePrice)} (${formatAmount(pairedAmount, pairedAsset)}).`;
+  els.rangeAmountConversion.textContent = "";
 }
 
 function renderTicketSummary() {
@@ -662,6 +727,7 @@ function renderTicketSummary() {
   const settlementDate = resolutionDateForSelectedTerm();
   const isValidRange = Number.isFinite(lower) && Number.isFinite(upper) && lower < upper;
   const isValidAmount = usdtValue >= RANGE_MIN_USDT;
+  const potentialReward = potentialRewardForQuote(quote);
 
   els.heroRangeValue.textContent = isValidRange ? formatShortRange(lower, upper) : formatShortRange(preset.lower, preset.upper);
   els.heroTermValue.textContent = `${term.label} window`;
@@ -680,6 +746,16 @@ function renderTicketSummary() {
         <button class="share-tooltip-trigger" type="button" aria-label="Share estimate calculation">?</button>
         <span class="share-tooltip" role="tooltip">
           ${formatUsdAmount(quote.grossAmount)} deposit - ${formatUsdAmount(quote.marginAmount)} platform fee (${(quote.marginRate * 100).toFixed(1).replace(/\.0$/, "")}%) = ${formatUsdAmount(quote.netAmount)} net. ${formatUsdAmount(quote.netAmount)} / ${formatUsdAmount(quote.sharePrice)} share price = ${formatShares(quote.shares)} shares.
+        </span>
+      </strong>
+    </div>
+    <div class="scenario-result potential-reward-row">
+      <span>Potential reward</span>
+      <strong class="reward-estimate-value is-positive">
+        ${formatRewardAmount(potentialReward)}
+        <button class="share-tooltip-trigger" type="button" aria-label="Potential reward calculation">?</button>
+        <span class="share-tooltip" role="tooltip">
+          ${potentialRewardTooltip(quote, potentialReward)}
         </span>
       </strong>
     </div>
@@ -745,7 +821,13 @@ function renderProfile() {
     return;
   }
 
+  const totalNetValue = portfolioNetValue(predictions);
+
   els.rangeProfilePanel.innerHTML = `
+    <div class="range-portfolio-summary">
+      <span>Total net portfolio value</span>
+      <strong>${formatUsdAmount(totalNetValue)}</strong>
+    </div>
     <div class="range-table">
       <div class="range-table-row range-table-head">
         <span>Wallet</span>
@@ -753,20 +835,25 @@ function renderProfile() {
         <span>Side</span>
         <span>Shares</span>
         <span>Avg Price</span>
+        <span>Unrealised</span>
         <span>Status</span>
         <span>Result</span>
       </div>
-      ${predictions.map((prediction) => `
+      ${predictions.map((prediction) => {
+        const unrealised = unrealisedEarningForPrediction(prediction);
+        return `
         <div class="range-table-row ${prediction.result === "won" ? "is-winner" : ""}">
           <span>${shortWallet(prediction.wallet)}</span>
           <span>${escapeHtml(prediction.termLabel)}</span>
           <span>${escapeHtml(prediction.side || "YES")}</span>
           <span>${formatShares(prediction.shares || 0)}</span>
           <span>${formatSharePrice(prediction.sharePrice || 0)}</span>
+          <span class="${unrealised === null ? "" : unrealised >= 0 ? "is-positive" : "is-negative"}">${unrealised === null ? "-" : formatSignedUsdAmount(unrealised)}</span>
           <span>${escapeHtml(prediction.status)}</span>
           <span>${prediction.result ? escapeHtml(prediction.result) : "-"}</span>
         </div>
-      `).join("")}
+      `;
+      }).join("")}
     </div>
   `;
 }
@@ -866,39 +953,43 @@ function setMarketView(view) {
   renderMarketViewTabs();
 }
 
-function submitPrediction() {
+function buildPendingRangeOrder() {
   if (!rangeWalletConnected) {
     showTradeError("Connect wallet to buy YES or NO shares.");
     showToast("Connect wallet to buy shares.");
-    return;
+    return null;
   }
 
   if (rangeState.marketStatus !== "open") {
     showTradeError(`Market is ${rangeState.marketStatus}.`);
     showToast(`Range prediction is ${rangeState.marketStatus}.`);
-    return;
+    return null;
   }
 
+  const term = selectedTerm();
+  const preset = selectedPreset();
   const { lower, upper, amount } = currentInputs();
   const usdtValue = amountToUsdt(amount, selectedAsset);
   const market = selectedMarket();
   const sharePrice = priceForSide(selectedSide, market);
-  const quote = shareQuote(usdtValue, selectedSide, market, currentHouseMarginRate(rangeState));
+  const houseMarginRate = currentHouseMarginRate(rangeState);
+  const quote = shareQuote(usdtValue, selectedSide, market, houseMarginRate);
 
   if (!Number.isFinite(lower) || !Number.isFinite(upper) || lower >= upper) {
     showTradeError("Select a valid range market.");
     showToast("Select a valid range market.");
-    return;
+    return null;
   }
 
   if (!Number.isFinite(usdtValue) || usdtValue < RANGE_MIN_USDT) {
     showTradeError("Minimum participation is 1 USDT equivalent.");
     showToast("Minimum participation is 1 USDT equivalent.");
-    return;
+    return null;
   }
 
-  const prediction = createPredictionRecord({
-    wallet: RANGE_DEMO_WALLET,
+  return {
+    term,
+    preset,
     termId: selectedTermId,
     presetId: selectedPresetId,
     lower,
@@ -906,15 +997,111 @@ function submitPrediction() {
     asset: selectedAsset,
     amount,
     side: selectedSide,
+    usdtValue,
     sharePrice,
-    houseMarginRate: currentHouseMarginRate(rangeState)
+    houseMarginRate,
+    quote,
+    settlementDate: resolutionDateForSelectedTerm(),
+    potentialReward: potentialRewardForQuote(quote)
+  };
+}
+
+function renderConfirmationSummary(order) {
+  els.confirmSummary.innerHTML = `
+    <div class="range-confirm-hero">
+      <small>Your prediction</small>
+      <strong>${order.side === "YES" ? "Silver resolves in range" : "Silver resolves outside range"}</strong>
+      <span>${formatRange(order.lower, order.upper)} · ${escapeHtml(order.term.label)}</span>
+    </div>
+    <div class="range-confirm-list">
+      <div>
+        <span>Participation</span>
+        <strong>${formatAmount(order.amount, order.asset)}</strong>
+      </div>
+      <div>
+        <span>Share price</span>
+        <strong>${formatSharePrice(order.sharePrice)}</strong>
+      </div>
+      <div class="range-confirm-highlight">
+        <span>Potential reward</span>
+        <strong class="reward-estimate-value">
+          ${formatRewardAmount(order.potentialReward)}
+          <button class="share-tooltip-trigger" type="button" aria-label="Potential reward calculation">?</button>
+          <span class="share-tooltip" role="tooltip">
+            ${potentialRewardTooltip(order.quote, order.potentialReward)}
+          </span>
+        </strong>
+      </div>
+      <div>
+        <span>Resolution</span>
+        <strong>${formatDate(order.settlementDate)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function openRangeConfirmation(order) {
+  pendingRangeOrder = order;
+  renderConfirmationSummary(order);
+  els.confirmModal.hidden = false;
+  els.confirmBuyButton.focus();
+}
+
+function closeRangeConfirmation() {
+  pendingRangeOrder = null;
+  els.confirmModal.hidden = true;
+}
+
+function submitPrediction() {
+  const order = buildPendingRangeOrder();
+  if (!order) {
+    return;
+  }
+
+  clearTradeError();
+  openRangeConfirmation(order);
+}
+
+function confirmPredictionPurchase() {
+  const order = pendingRangeOrder;
+  if (!order) {
+    closeRangeConfirmation();
+    return;
+  }
+
+  if (!rangeWalletConnected) {
+    closeRangeConfirmation();
+    showTradeError("Connect wallet to buy YES or NO shares.");
+    showToast("Connect wallet to buy shares.");
+    return;
+  }
+
+  if (rangeState.marketStatus !== "open") {
+    closeRangeConfirmation();
+    showTradeError(`Market is ${rangeState.marketStatus}.`);
+    showToast(`Range prediction is ${rangeState.marketStatus}.`);
+    return;
+  }
+
+  const prediction = createPredictionRecord({
+    wallet: RANGE_DEMO_WALLET,
+    termId: order.termId,
+    presetId: order.presetId,
+    lower: order.lower,
+    upper: order.upper,
+    asset: order.asset,
+    amount: order.amount,
+    side: order.side,
+    sharePrice: order.sharePrice,
+    houseMarginRate: order.houseMarginRate
   });
 
   rangeState.predictions.push(prediction);
   saveRangeState();
+  closeRangeConfirmation();
   clearTradeError();
   renderAll();
-  showToast(`Bought ${formatShares(prediction.shares)} ${selectedSide} shares after ${formatAmount(quote.marginAmount, "USDT")} platform fee.`);
+  showToast(`Bought ${formatShares(prediction.shares)} ${order.side} shares after ${formatAmount(order.quote.marginAmount, "USDT")} platform fee.`);
 }
 
 function settleOpenPredictions(finalPrice) {
@@ -1005,9 +1192,22 @@ function bindEvents() {
     }
   });
   els.submitButton.addEventListener("click", submitPrediction);
+  els.cancelConfirmButton.addEventListener("click", closeRangeConfirmation);
+  els.confirmBuyButton.addEventListener("click", confirmPredictionPurchase);
+  els.confirmModal.addEventListener("click", (event) => {
+    if (event.target === els.confirmModal) {
+      closeRangeConfirmation();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !els.confirmModal.hidden) {
+      closeRangeConfirmation();
+    }
+  });
 
   els.resetRangeButton.addEventListener("click", () => {
     rangeState = { marketStatus: "open", predictions: seedPredictions() };
+    closeRangeConfirmation();
     saveRangeState();
     renderAll();
     showToast("Range prediction demo reset.");

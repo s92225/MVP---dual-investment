@@ -1248,6 +1248,75 @@ select:focus {
   color: var(--color-ink);
 }
 
+.range-confirm-summary {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.range-confirm-summary span {
+  display: inline;
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.range-confirm-summary strong {
+  color: var(--color-ink);
+}
+
+.range-confirm-hero {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--color-fog);
+}
+
+.range-confirm-hero small,
+.range-confirm-list span {
+  color: var(--color-light-steel);
+  font-size: 12px;
+}
+
+.range-confirm-hero strong {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.range-confirm-hero span {
+  color: var(--color-steel);
+  font-size: 13px;
+}
+
+.range-confirm-list {
+  display: grid;
+  gap: 8px;
+}
+
+.range-confirm-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--color-fog);
+}
+
+.range-confirm-list strong {
+  text-align: right;
+}
+
+.range-confirm-list .range-confirm-highlight {
+  background: rgba(0, 193, 118, 0.12);
+}
+
+.range-confirm-list .range-confirm-highlight strong {
+  color: #00c176;
+}
+
 .confirm-check {
   grid-template-columns: 18px 1fr;
   align-items: start;
@@ -2457,7 +2526,8 @@ select:focus {
   overflow-wrap: anywhere;
 }
 
-.share-estimate-value {
+.share-estimate-value,
+.reward-estimate-value {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -2499,7 +2569,9 @@ select:focus {
 }
 
 .share-estimate-value:hover .share-tooltip,
-.share-estimate-value:focus-within .share-tooltip {
+.share-estimate-value:focus-within .share-tooltip,
+.reward-estimate-value:hover .share-tooltip,
+.reward-estimate-value:focus-within .share-tooltip {
   display: block;
 }
 
@@ -2528,14 +2600,35 @@ select:focus {
   overflow-x: auto;
 }
 
+.range-portfolio-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  min-width: 920px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-hint-of-grey);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.range-portfolio-summary span {
+  color: var(--color-light-steel);
+  font-size: 13px;
+}
+
+.range-portfolio-summary strong {
+  color: var(--color-white);
+  font-size: 20px;
+}
+
 .range-table {
   display: grid;
-  min-width: 820px;
+  min-width: 920px;
 }
 
 .range-table-row {
   display: grid;
-  grid-template-columns: 0.95fr 0.62fr 1.15fr 0.8fr 0.92fr 0.62fr 0.78fr;
+  grid-template-columns: 0.95fr 0.62fr 0.58fr 1.12fr 0.8fr 0.92fr 0.62fr 0.78fr;
   gap: 12px;
   align-items: center;
   min-height: 58px;

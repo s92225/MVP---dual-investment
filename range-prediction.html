@@ -195,7 +195,18 @@
     </main>
 
     <div id="rangeToast" class="toast" role="status" aria-live="polite"></div>
+    <div id="rangeConfirmModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="rangeConfirmTitle" hidden>
+      <div class="confirm-card">
+        <p class="eyebrow">Order Review</p>
+        <h3 id="rangeConfirmTitle">Confirm range prediction</h3>
+        <div id="rangeConfirmSummary" class="confirm-summary range-confirm-summary"></div>
+        <div class="confirm-actions">
+          <button id="cancelRangePredictionButton" class="ghost-button" type="button">Cancel</button>
+          <button id="confirmRangePredictionButton" class="primary-button" type="button">Confirm Buy</button>
+        </div>
+      </div>
+    </div>
 
-    <script src="range-prediction.js?v=20260520-margin-control-fix"></script>
+    <script src="range-prediction.js?v=20260520-buy-confirmation-layout"></script>
   </body>
 </html>
