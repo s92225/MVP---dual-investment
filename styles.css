@@ -2453,6 +2453,23 @@ select:focus {
   overflow-wrap: anywhere;
 }
 
+.range-trade-error {
+  display: none;
+  min-height: 38px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid rgba(240, 68, 82, 0.45);
+  border-radius: 12px;
+  background: rgba(240, 68, 82, 0.14);
+  color: #ff9aa4;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.range-trade-error.is-visible {
+  display: flex;
+}
+
 .range-stats-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

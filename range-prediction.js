@@ -117,6 +117,7 @@ const els = {
   rangeSttButton: document.querySelector("#rangeSttButton"),
   rangeTicketSummary: document.querySelector("#rangeTicketSummary"),
   submitButton: document.querySelector("#submitRangePredictionButton"),
+  tradeError: document.querySelector("#rangeTradeError"),
   rangeStatsGrid: document.querySelector("#rangeStatsGrid"),
   rangeProfilePanel: document.querySelector("#rangeProfilePanel"),
   resetRangeButton: document.querySelector("#resetRangeButton"),
@@ -644,7 +645,7 @@ function renderTicketSummary() {
     </div>
   `;
 
-  els.submitButton.disabled = !rangeWalletConnected || rangeState.marketStatus !== "open" || !isValidRange || !isValidAmount;
+  els.submitButton.disabled = rangeState.marketStatus !== "open" || !isValidRange || !isValidAmount;
 }
 
 function renderResolutionCountdown() {
@@ -761,6 +762,16 @@ function showToast(message) {
   rangeToastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), 2600);
 }
 
+function showTradeError(message) {
+  els.tradeError.textContent = message;
+  els.tradeError.classList.add("is-visible");
+}
+
+function clearTradeError() {
+  els.tradeError.textContent = "";
+  els.tradeError.classList.remove("is-visible");
+}
+
 function setPreset(presetId) {
   const preset = RANGE_PRESETS.find((item) => item.id === presetId);
   if (!preset) {
@@ -769,6 +780,7 @@ function setPreset(presetId) {
 
   selectedPresetId = preset.id;
   selectedTermId = preset.term;
+  clearTradeError();
   renderAll();
 }
 
@@ -780,6 +792,7 @@ function setTerm(termId) {
 
   selectedTermId = termId;
   selectedPresetId = termPresets[0].id;
+  clearTradeError();
   renderAll();
 }
 
@@ -794,11 +807,13 @@ function setAsset(asset) {
     els.rangeAmountInput.value = converted.toFixed(selectedAsset === "USDT" ? 2 : 4).replace(/\.?0+$/, "");
   }
 
+  clearTradeError();
   renderAll();
 }
 
 function setSide(side) {
   selectedSide = side === "NO" ? "NO" : "YES";
+  clearTradeError();
   renderAll();
 }
 
@@ -809,11 +824,13 @@ function setMarketView(view) {
 
 function submitPrediction() {
   if (!rangeWalletConnected) {
-    showToast("Connect the demo wallet first.");
+    showTradeError("Connect wallet to buy YES or NO shares.");
+    showToast("Connect wallet to buy shares.");
     return;
   }
 
   if (rangeState.marketStatus !== "open") {
+    showTradeError(`Market is ${rangeState.marketStatus}.`);
     showToast(`Range prediction is ${rangeState.marketStatus}.`);
     return;
   }
@@ -824,11 +841,13 @@ function submitPrediction() {
   const sharePrice = priceForSide(selectedSide, market);
 
   if (!Number.isFinite(lower) || !Number.isFinite(upper) || lower >= upper) {
+    showTradeError("Select a valid range market.");
     showToast("Select a valid range market.");
     return;
   }
 
   if (!Number.isFinite(usdtValue) || usdtValue < RANGE_MIN_USDT) {
+    showTradeError("Minimum participation is 1 USDT equivalent.");
     showToast("Minimum participation is 1 USDT equivalent.");
     return;
   }
@@ -847,6 +866,7 @@ function submitPrediction() {
 
   rangeState.predictions.push(prediction);
   saveRangeState();
+  clearTradeError();
   renderAll();
   showToast(`Bought ${formatShares(prediction.shares)} ${selectedSide} shares at ${formatSharePrice(sharePrice)}.`);
 }
@@ -888,6 +908,7 @@ function bindEvents() {
   els.walletButton.addEventListener("click", () => {
     rangeWalletConnected = !rangeWalletConnected;
     localStorage.setItem(RANGE_WALLET_KEY, String(rangeWalletConnected));
+    clearTradeError();
     renderAll();
     showToast(rangeWalletConnected ? "Demo wallet connected." : "Demo wallet disconnected.");
   });
@@ -903,7 +924,10 @@ function bindEvents() {
     }
   });
 
-  els.rangeAmountInput.addEventListener("input", renderAll);
+  els.rangeAmountInput.addEventListener("input", () => {
+    clearTradeError();
+    renderAll();
+  });
 
   els.rangeUsdtButton.addEventListener("click", () => setAsset("USDT"));
   els.rangeSttButton.addEventListener("click", () => setAsset("STT"));
