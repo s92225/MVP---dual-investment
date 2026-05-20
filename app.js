@@ -776,7 +776,6 @@ function renderDetail() {
             ${amountConversionText(amount, selectedAmountAsset)}
           </div>
         </div>
-        <div id="quoteBox" class="quote-box"></div>
         <button class="primary-button" type="submit">${product.userAction}</button>
       </form>
     </div>
