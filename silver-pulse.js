@@ -1,23 +1,32 @@
-const PULSE_STORAGE_KEY = "silvertimes-silver-pulse-state-v4";
+const PULSE_STORAGE_KEY = "silvertimes-silver-pulse-state-v5";
 const PULSE_WALLET_KEY = "silvertimes-silver-pulse-wallet-connected";
 const DEMO_WALLET = "0x51cb9f3d6c0a42e89491dd2b7c12f4c0a9c0de55";
 const PRICE_SOURCE = "LBMA Silver Price (manual MVP input)";
-const SCORE_RULES = {
-  basePoints: 100,
-  timeBonusTiers: [
-    { minHoursToCutoff: 8, multiplier: 1.5 },
-    { minHoursToCutoff: 6, multiplier: 1.3 },
-    { minHoursToCutoff: 4, multiplier: 1.2 },
-    { minHoursToCutoff: 2, multiplier: 1.1 },
-    { minHoursToCutoff: 0, multiplier: 1 }
-  ],
+const HK_OFFSET_MS = 8 * 60 * 60 * 1000;
+const GAME_RULES = {
+  minBetSparks: 10,
+  maxDailyBetSparks: 100,
+  startingSparks: 10,
+  dailySparks: 10,
+  freeSparkCap: 100,
+  sparksPerUsdt: 2000,
+  sttStakeAmount: 1,
+  sttReferenceUsdt: 75,
+  stakeLockDays: 7,
+  stakeWinMultiplier: 1.5,
+  tradingDaysPerYear: 260,
+  missionRewards: {
+    fiveDayWeek: 100,
+    firstWinningGuess: 100,
+    stakeStt: 1000
+  },
   streakMultipliers: [
-    { wins: 10, multiplier: 2 },
-    { wins: 7, multiplier: 1.8 },
-    { wins: 5, multiplier: 1.5 },
-    { wins: 3, multiplier: 1.2 },
-    { wins: 2, multiplier: 1.1 },
-    { wins: 1, multiplier: 1 }
+    { priorWins: 5, multiplier: 1.5 },
+    { priorWins: 4, multiplier: 1.4 },
+    { priorWins: 3, multiplier: 1.3 },
+    { priorWins: 2, multiplier: 1.2 },
+    { priorWins: 1, multiplier: 1.1 },
+    { priorWins: 0, multiplier: 1 }
   ]
 };
 
@@ -45,6 +54,7 @@ const SAMPLE_WALLETS = [
   "0xe0f1c848a911d73bb06edc91c5d7f4200de00021",
   "0xf38d10be52a4c0f713d69bc177e02a91ace00022"
 ];
+
 // Seeded MVP chart series; replace with historical silver prices when the data feed is connected.
 const MONTHLY_SILVER_PRICES = [
   { label: "Apr 12", value: 72.4 },
@@ -67,6 +77,7 @@ let countdownTimer = null;
 let monthlyChartState = null;
 let celebrationTimer = null;
 let selectedLeaderboardWeekKey = null;
+let pendingGuess = null;
 
 const els = {
   walletButton: document.querySelector("#pulseWalletButton"),
@@ -82,6 +93,9 @@ const els = {
   currentPriceValue: document.querySelector("#currentPriceValue"),
   cutoffValue: document.querySelector("#cutoffValue"),
   countdownValue: document.querySelector("#countdownValue"),
+  sparkBetAmount: document.querySelector("#sparkBetAmount"),
+  betAmountDisplay: document.querySelector("#betAmountDisplay"),
+  betLimitText: document.querySelector("#betLimitText"),
   predictUpButton: document.querySelector("#predictUpButton"),
   predictDownButton: document.querySelector("#predictDownButton"),
   predictionCelebration: document.querySelector("#predictionCelebration"),
@@ -105,12 +119,19 @@ const els = {
   adminRewardPool: document.querySelector("#adminRewardPool"),
   adminMaxWinners: document.querySelector("#adminMaxWinners"),
   adminStatus: document.querySelector("#adminStatus"),
+  adminSparkBalance: document.querySelector("#adminSparkBalance"),
   adminOverride: document.querySelector("#adminOverride"),
   adminCutoffTime: document.querySelector("#adminCutoffTime"),
   adminSettlementTime: document.querySelector("#adminSettlementTime"),
   settlePulseButton: document.querySelector("#settlePulseButton"),
   markRewardsApprovedButton: document.querySelector("#markRewardsApprovedButton"),
   markRewardsPaidButton: document.querySelector("#markRewardsPaidButton"),
+  guessConfirmModal: document.querySelector("#guessConfirmModal"),
+  guessConfirmText: document.querySelector("#guessConfirmText"),
+  guessConfirmMode: document.querySelector("#guessConfirmMode"),
+  guessConfirmModeMeta: document.querySelector("#guessConfirmModeMeta"),
+  cancelGuessButton: document.querySelector("#cancelGuessButton"),
+  confirmGuessButton: document.querySelector("#confirmGuessButton"),
   toast: document.querySelector("#pulseToast")
 };
 
@@ -161,17 +182,43 @@ function normalizeState(state) {
     return createDefaultState();
   }
 
-  const today = nearestTradingDate(new Date());
-  const demoPastRounds = createPastRounds(today, 12);
-  const existingRoundIds = new Set(state.rounds.map((round) => round.id));
+  const activeDateKey = activeTradingDateKey(new Date());
   const nextState = {
     ...state,
+    version: 5,
+    user: normalizeUser(state.user, activeDateKey),
     rounds: [...state.rounds],
-    predictions: [...state.predictions],
-    rewards: [...state.rewards]
+    predictions: state.predictions.map(normalizePrediction),
+    rewards: Array.isArray(state.rewards) ? [...state.rewards] : [],
+    sparkLedger: Array.isArray(state.sparkLedger) ? [...state.sparkLedger] : []
   };
 
-  demoPastRounds.forEach((round) => {
+  if (!nextState.sparkLedger.length) {
+    nextState.sparkLedger.push({
+      id: `SL-initial-${Date.now()}`,
+      wallet: DEMO_WALLET,
+      type: "initial",
+      amount: GAME_RULES.startingSparks,
+      balanceAfter: nextState.user.sparkBalance,
+      reason: "Starting Sparks",
+      roundId: null,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  const existingRoundIds = new Set(nextState.rounds.map((round) => round.id));
+  const currentRoundId = roundIdForDateKey(activeDateKey);
+
+  if (!existingRoundIds.has(currentRoundId)) {
+    nextState.rounds.unshift(createRound(activeDateKey, {
+      openingPrice: 78,
+      currentPrice: 78.42,
+      status: "open"
+    }));
+    existingRoundIds.add(currentRoundId);
+  }
+
+  createPastRounds(activeDateKey, 12).forEach((round) => {
     if (existingRoundIds.has(round.id)) {
       return;
     }
@@ -196,60 +243,128 @@ function normalizeState(state) {
   return nextState;
 }
 
+function normalizeUser(user, activeDateKey) {
+  const normalized = {
+    wallet: DEMO_WALLET,
+    sparkBalance: Number.isFinite(Number(user?.sparkBalance)) ? Number(user.sparkBalance) : GAME_RULES.startingSparks,
+    dailySparkGrantDates: Array.isArray(user?.dailySparkGrantDates) ? [...user.dailySparkGrantDates] : [activeDateKey],
+    stake: user?.stake || null,
+    missions: {
+      fiveDayWeeks: Array.isArray(user?.missions?.fiveDayWeeks) ? [...user.missions.fiveDayWeeks] : [],
+      firstWinRewarded: Boolean(user?.missions?.firstWinRewarded),
+      stakeRewarded: Boolean(user?.missions?.stakeRewarded)
+    },
+    redemptions: Array.isArray(user?.redemptions) ? [...user.redemptions] : []
+  };
+
+  if (!Number.isFinite(normalized.sparkBalance)) {
+    normalized.sparkBalance = GAME_RULES.startingSparks;
+  }
+
+  return normalized;
+}
+
+function normalizePrediction(prediction) {
+  const amountSparks = clampInteger(
+    prediction.amountSparks ?? GAME_RULES.minBetSparks,
+    GAME_RULES.minBetSparks,
+    GAME_RULES.maxDailyBetSparks
+  );
+  const createdAt = prediction.createdAt || new Date().toISOString();
+
+  return {
+    ...prediction,
+    amountSparks,
+    mode: prediction.mode || "paper",
+    stakingMultiplier: Number(prediction.stakingMultiplier || 1),
+    editCount: Number(prediction.editCount || 0),
+    updatedAt: prediction.updatedAt || createdAt,
+    history: Array.isArray(prediction.history) && prediction.history.length
+      ? prediction.history
+      : [{
+        action: "submitted",
+        side: prediction.side,
+        amountSparks,
+        mode: prediction.mode || "paper",
+        createdAt
+      }]
+  };
+}
+
 function createDefaultState() {
-  const today = nearestTradingDate(new Date());
-  const activeRound = createRound(today, {
+  const activeDateKey = activeTradingDateKey(new Date());
+  const activeRound = createRound(activeDateKey, {
     openingPrice: 78,
     currentPrice: 78.42,
     status: "open"
   });
-  const pastRounds = createPastRounds(today, 12);
-
-  const predictions = [
-    ...seedPredictions(activeRound, [
-      ["UP", 8, 2],
-      ["UP", 13, 1],
-      ["DOWN", 19, 0],
-      ["UP", 25, 4],
-      ["DOWN", 31, 1],
-      ["UP", 39, 0],
-      ["UP", 47, 3],
-      ["DOWN", 58, 2],
-      ["UP", 74, 0],
-      ["DOWN", 86, 0],
-      ["UP", 101, 1],
-      ["UP", 118, 2],
-      ["DOWN", 136, 0],
-      ["UP", 154, 1],
-      ["UP", 173, 0],
-      ["DOWN", 191, 0],
-      ["UP", 209, 2],
-      ["DOWN", 228, 1],
-      ["UP", 241, 0],
-      ["DOWN", 269, 0],
-      ["UP", 298, 1],
-      ["UP", 337, 0]
-    ]),
-    ...pastRounds.flatMap((round) => seedPastPredictions(round, round.winningSide))
-  ];
+  const pastRounds = createPastRounds(activeDateKey, 12);
+  const activePredictions = seedPredictions(activeRound, [
+    ["UP", 8, 20, 2],
+    ["UP", 13, 30, 1],
+    ["DOWN", 19, 10, 0],
+    ["UP", 25, 40, 4],
+    ["DOWN", 31, 20, 1],
+    ["UP", 39, 100, 0],
+    ["UP", 47, 60, 3],
+    ["DOWN", 58, 10, 2],
+    ["UP", 74, 30, 0],
+    ["DOWN", 86, 80, 0],
+    ["UP", 101, 50, 1],
+    ["UP", 118, 10, 2],
+    ["DOWN", 136, 70, 0],
+    ["UP", 154, 30, 1],
+    ["UP", 173, 20, 0],
+    ["DOWN", 191, 40, 0],
+    ["UP", 209, 60, 2],
+    ["DOWN", 228, 30, 1],
+    ["UP", 241, 20, 0],
+    ["DOWN", 269, 100, 0],
+    ["UP", 298, 40, 1],
+    ["UP", 337, 10, 0]
+  ]);
+  const pastPredictions = pastRounds.flatMap((round) => seedPastPredictions(round, round.winningSide));
+  const predictions = [...activePredictions, ...pastPredictions];
   const rewards = pastRounds.flatMap((round) => {
     return createDemoRewardsForRound(round, predictions.filter((prediction) => prediction.roundId === round.id));
   });
 
   return {
-    version: 1,
+    version: 5,
+    user: {
+      wallet: DEMO_WALLET,
+      sparkBalance: GAME_RULES.startingSparks,
+      dailySparkGrantDates: [activeDateKey],
+      stake: null,
+      missions: {
+        fiveDayWeeks: [],
+        firstWinRewarded: false,
+        stakeRewarded: false
+      },
+      redemptions: []
+    },
+    sparkLedger: [{
+      id: `SL-initial-${Date.now()}`,
+      wallet: DEMO_WALLET,
+      type: "initial",
+      amount: GAME_RULES.startingSparks,
+      balanceAfter: GAME_RULES.startingSparks,
+      reason: "Starting Sparks",
+      roundId: null,
+      createdAt: new Date().toISOString()
+    }],
     rounds: [activeRound, ...pastRounds],
     predictions,
     rewards
   };
 }
 
-function createPastRounds(today, count) {
+function createPastRounds(activeDateKey, count) {
   const rounds = [];
-  let cursor = today;
+  let cursor = activeDateKey;
 
   for (let index = 0; index < count; index += 1) {
-    cursor = previousTradingDate(cursor);
+    cursor = previousTradingDateKey(cursor);
     const winningSide = index % 3 === 1 ? "DOWN" : "UP";
     const openingPrice = 78 + ((index % 5) - 2) * 0.28;
     const move = 0.45 + (index % 4) * 0.17;
@@ -260,8 +375,7 @@ function createPastRounds(today, count) {
       currentPrice: closingPrice,
       closingPrice,
       winningSide,
-      status: "settled",
-      maxWinners: 5
+      status: "settled"
     }));
   }
 
@@ -269,47 +383,36 @@ function createPastRounds(today, count) {
 }
 
 function createDemoRewardsForRound(round, predictions) {
-  const winners = predictions
+  return predictions
     .filter((prediction) => prediction.side === round.winningSide && round.winningSide !== "FLAT")
     .map((prediction) => ({
       prediction,
       score: calculateScore(prediction, round)
     }))
     .sort(compareScoredPredictions)
-    .slice(0, round.maxWinners);
-
-  if (!winners.length) {
-    return [];
-  }
-
-  const baseCents = Math.floor(round.rewardPoolCents / winners.length);
-  let remainder = round.rewardPoolCents - baseCents * winners.length;
-
-  return winners.map((entry, index) => {
-    const extraCent = remainder > 0 ? 1 : 0;
-    remainder -= extraCent;
-    return {
-      id: `RW-${round.id}-${entry.prediction.wallet.slice(-6)}-${index + 1}`,
-      roundId: round.id,
-      wallet: entry.prediction.wallet,
-      rank: index + 1,
-      rewardAmountCents: baseCents + extraCent,
-      score: entry.score,
-      status: "paid",
-      createdAt: round.settledAt || round.settlementTime,
-      updatedAt: round.settledAt || round.settlementTime
-    };
-  });
+    .map((entry, index) => {
+      const outcome = calculatePredictionOutcome(entry.prediction, round);
+      return {
+        id: `RW-${round.id}-${entry.prediction.wallet.slice(-6)}-${index + 1}`,
+        roundId: round.id,
+        wallet: entry.prediction.wallet,
+        rank: index + 1,
+        sparkProfit: outcome.sparkProfit,
+        returnedStake: outcome.returnedStake,
+        finalMultiplier: outcome.finalMultiplier,
+        status: "settled",
+        createdAt: round.settledAt || round.settlementTime,
+        updatedAt: round.settledAt || round.settlementTime
+      };
+    });
 }
 
-function createRound(date, overrides = {}) {
-  const dateKey = localDateKey(date);
-  const startTime = atLocalTime(dateKey, 0, 0);
-  const cutoffTime = londonTimeToUtc(dateKey, 10, 0);
-  const settlementTime = londonTimeToUtc(dateKey, 12, 0);
+function createRound(dateKey, overrides = {}) {
+  const startTime = hkDateTimeToUtc(dateKey, 12, 0);
+  const cutoffTime = hkDateTimeToUtc(addDateKey(dateKey, 1), 10, 0);
 
   return {
-    id: `SP-${dateKey}`,
+    id: roundIdForDateKey(dateKey),
     roundDate: dateKey,
     title: `Silver Pulse ${dateKey}`,
     openingPrice: overrides.openingPrice ?? 78,
@@ -318,43 +421,71 @@ function createRound(date, overrides = {}) {
     winningSide: overrides.winningSide ?? null,
     resultOverride: overrides.resultOverride ?? "",
     status: overrides.status ?? "open",
-    rewardPoolCents: overrides.rewardPoolCents ?? 2000,
-    maxWinners: overrides.maxWinners ?? 20,
+    rewardPoolCents: overrides.rewardPoolCents ?? 0,
+    maxWinners: overrides.maxWinners ?? 0,
     startTime: startTime.toISOString(),
     predictionCutoffTime: cutoffTime.toISOString(),
-    settlementTime: settlementTime.toISOString(),
+    settlementTime: cutoffTime.toISOString(),
     priceSource: PRICE_SOURCE,
     createdAt: startTime.toISOString(),
     updatedAt: new Date().toISOString(),
-    settledAt: overrides.status === "settled" ? settlementTime.toISOString() : null
+    settledAt: overrides.status === "settled" ? cutoffTime.toISOString() : null
   };
 }
 
 function seedPredictions(round, rows) {
   const start = new Date(round.startTime).getTime();
-  return rows.map(([side, minutesAfterStart, priorWinStreak], index) => ({
-    id: `PR-${round.id}-${index + 1}`,
-    roundId: round.id,
-    wallet: SAMPLE_WALLETS[index],
-    side,
-    createdAt: new Date(start + minutesAfterStart * 60 * 1000).toISOString(),
-    priorWinStreak,
-    score: null,
-    result: null
-  }));
+  return rows.map(([side, minutesAfterStart, amountSparks, priorWinStreak], index) => {
+    const createdAt = new Date(start + minutesAfterStart * 60 * 1000).toISOString();
+    return {
+      id: `PR-${round.id}-${index + 1}`,
+      roundId: round.id,
+      wallet: SAMPLE_WALLETS[index],
+      side,
+      amountSparks,
+      mode: "paper",
+      stakingMultiplier: 1,
+      createdAt,
+      updatedAt: createdAt,
+      editCount: 0,
+      history: [{
+        action: "submitted",
+        side,
+        amountSparks,
+        mode: "paper",
+        createdAt
+      }],
+      priorWinStreak,
+      score: null,
+      result: null
+    };
+  });
 }
 
 function seedPastPredictions(round, winningSide) {
   const start = new Date(round.startTime).getTime();
-  const wallets = [DEMO_WALLET, ...SAMPLE_WALLETS.slice(0, 6)];
-  return wallets.map((wallet, index) => {
+  return SAMPLE_WALLETS.slice(0, 7).map((wallet, index) => {
     const side = index === 2 ? (winningSide === "UP" ? "DOWN" : "UP") : winningSide;
+    const amountSparks = [10, 20, 30, 40, 50, 80, 100][index];
+    const createdAt = new Date(start + (18 + index * 17) * 60 * 1000).toISOString();
     const prediction = {
       id: `PR-${round.id}-past-${index + 1}`,
       roundId: round.id,
       wallet,
       side,
-      createdAt: new Date(start + (18 + index * 17) * 60 * 1000).toISOString(),
+      amountSparks,
+      mode: "paper",
+      stakingMultiplier: 1,
+      createdAt,
+      updatedAt: createdAt,
+      editCount: 0,
+      history: [{
+        action: "submitted",
+        side,
+        amountSparks,
+        mode: "paper",
+        createdAt
+      }],
       priorWinStreak: Math.max(0, 2 - index),
       result: side === winningSide ? "correct" : "incorrect"
     };
@@ -365,6 +496,77 @@ function seedPastPredictions(round, winningSide) {
   });
 }
 
+function roundIdForDateKey(dateKey) {
+  return `SP-${dateKey}`;
+}
+
+function hkDateTimeToUtc(dateKey, hour, minute) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0) - HK_OFFSET_MS);
+}
+
+function hkParts(date) {
+  const hkDate = new Date(date.getTime() + HK_OFFSET_MS);
+  return {
+    year: hkDate.getUTCFullYear(),
+    month: hkDate.getUTCMonth() + 1,
+    day: hkDate.getUTCDate(),
+    hour: hkDate.getUTCHours(),
+    minute: hkDate.getUTCMinutes()
+  };
+}
+
+function hkDateKey(date = new Date()) {
+  const parts = hkParts(date);
+  return [
+    parts.year,
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0")
+  ].join("-");
+}
+
+function activeTradingDateKey(date) {
+  const parts = hkParts(date);
+  const todayKey = hkDateKey(date);
+  const previousKey = addDateKey(todayKey, -1);
+  const previousTradingKey = previousTradingDateKey(todayKey);
+
+  if (parts.hour < 12 && previousTradingKey === previousKey) {
+    return previousTradingKey;
+  }
+
+  if (isTradingDateKey(todayKey)) {
+    return todayKey;
+  }
+
+  return nextTradingDateKey(todayKey);
+}
+
+function previousTradingDateKey(dateKey) {
+  let cursor = addDateKey(dateKey, -1);
+  while (!isTradingDateKey(cursor)) {
+    cursor = addDateKey(cursor, -1);
+  }
+  return cursor;
+}
+
+function nextTradingDateKey(dateKey) {
+  let cursor = dateKey;
+  while (!isTradingDateKey(cursor)) {
+    cursor = addDateKey(cursor, 1);
+  }
+  return cursor;
+}
+
+function isTradingDateKey(dateKey) {
+  const day = dateFromDateKey(dateKey).getDay();
+  return day !== 0 && day !== 6;
+}
+
+function addDateKey(dateKey, days) {
+  return localDateKey(addDays(dateFromDateKey(dateKey), days));
+}
+
 function localDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -372,60 +574,9 @@ function localDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
-function atLocalTime(dateKey, hour, minute) {
+function dateFromDateKey(dateKey) {
   const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(year, month - 1, day, hour, minute, 0, 0);
-}
-
-function londonTimeToUtc(dateKey, hour, minute) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
-  const londonOffset = timeZoneOffsetMs(utcGuess, "Europe/London");
-  return new Date(utcGuess.getTime() - londonOffset);
-}
-
-function timeZoneOffsetMs(date, timeZone) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23"
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const asUtc = Date.UTC(
-    Number(values.year),
-    Number(values.month) - 1,
-    Number(values.day),
-    Number(values.hour),
-    Number(values.minute),
-    Number(values.second)
-  );
-  return asUtc - date.getTime();
-}
-
-function nearestTradingDate(date) {
-  let cursor = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  while (!isTradingDay(cursor)) {
-    cursor = addDays(cursor, 1);
-  }
-  return cursor;
-}
-
-function previousTradingDate(date) {
-  let cursor = addDays(date, -1);
-  while (!isTradingDay(cursor)) {
-    cursor = addDays(cursor, -1);
-  }
-  return cursor;
-}
-
-function isTradingDay(date) {
-  const day = date.getDay();
-  return day !== 0 && day !== 6;
+  return new Date(year, month - 1, day);
 }
 
 function addDays(date, days) {
@@ -459,6 +610,10 @@ function formatPrice(value) {
   })}`;
 }
 
+function formatSparkAmount(value) {
+  return `${Number(value).toLocaleString("en-US")} Sparks`;
+}
+
 function formatDateTime(value) {
   if (!value) {
     return "-";
@@ -469,6 +624,21 @@ function formatDateTime(value) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function formatHkDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Hong_Kong",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
   }).format(new Date(value));
 }
 
@@ -522,6 +692,78 @@ function shortWallet(wallet) {
   return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
 }
 
+function clampInteger(value, min, max) {
+  const numeric = Math.floor(Number(value));
+  if (!Number.isFinite(numeric)) {
+    return min;
+  }
+
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function getUser() {
+  pulseState.user = normalizeUser(pulseState.user, activeTradingDateKey(new Date()));
+  return pulseState.user;
+}
+
+function isUserStaked() {
+  const stake = getUser().stake;
+  return Boolean(stake && stake.active);
+}
+
+function stakeUnlockTime() {
+  return getUser().stake?.unlockAt || null;
+}
+
+function currentModeLabel() {
+  return isUserStaked() ? "Trading Mode" : "Paper Mode";
+}
+
+function currentModeMeta() {
+  return isUserStaked() ? "1 STT staked" : "Demo Sparks only";
+}
+
+function applySparkChange(amount, type, reason, roundId = null) {
+  const user = getUser();
+  user.sparkBalance = Math.max(0, Math.round(Number(user.sparkBalance || 0) + amount));
+  pulseState.sparkLedger.push({
+    id: `SL-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    wallet: DEMO_WALLET,
+    type,
+    amount,
+    balanceAfter: user.sparkBalance,
+    reason,
+    roundId,
+    createdAt: new Date().toISOString()
+  });
+}
+
+function ensureDailySparkGrant(showMessage = false) {
+  const user = getUser();
+  const tradingDate = activeTradingDateKey(new Date());
+
+  if (user.dailySparkGrantDates.includes(tradingDate)) {
+    return false;
+  }
+
+  user.dailySparkGrantDates.push(tradingDate);
+
+  if (user.sparkBalance <= GAME_RULES.freeSparkCap) {
+    applySparkChange(GAME_RULES.dailySparks, "daily-grant", `Daily ${GAME_RULES.dailySparks} Sparks`, null);
+    saveState();
+    if (showMessage) {
+      showToast(`Daily reward added: ${GAME_RULES.dailySparks} Sparks.`);
+    }
+    return true;
+  }
+
+  saveState();
+  if (showMessage) {
+    showToast("Daily Sparks skipped because your balance is above 100.");
+  }
+  return false;
+}
+
 function effectiveStatus(round) {
   const now = Date.now();
   const start = new Date(round.startTime).getTime();
@@ -543,7 +785,10 @@ function effectiveStatus(round) {
 }
 
 function getActiveRound(state = pulseState) {
-  return state.rounds.find((round) => ["open", "locked", "upcoming"].includes(round.status)) || state.rounds[0];
+  const activeId = roundIdForDateKey(activeTradingDateKey(new Date()));
+  return state.rounds.find((round) => round.id === activeId) ||
+    state.rounds.find((round) => ["open", "locked", "upcoming"].includes(round.status)) ||
+    state.rounds[0];
 }
 
 function predictionsForRound(roundId, state = pulseState) {
@@ -556,6 +801,16 @@ function rewardsForRound(roundId, state = pulseState) {
 
 function currentWalletPrediction(round, state = pulseState) {
   return state.predictions.find((prediction) => prediction.roundId === round.id && prediction.wallet === DEMO_WALLET) || null;
+}
+
+function dailyBetTotalForWallet(round, wallet, excludePredictionId = null, state = pulseState) {
+  return predictionsForRound(round.id, state)
+    .filter((prediction) => prediction.wallet === wallet && prediction.id !== excludePredictionId)
+    .reduce((total, prediction) => total + Number(prediction.amountSparks || 0), 0);
+}
+
+function remainingDailyBetForWallet(round, wallet, excludePredictionId = null) {
+  return Math.max(0, GAME_RULES.maxDailyBetSparks - dailyBetTotalForWallet(round, wallet, excludePredictionId));
 }
 
 function sentimentForRound(round, state = pulseState) {
@@ -647,6 +902,10 @@ function launchPredictionCelebration(side, triggerButton) {
 }
 
 function render() {
+  if (walletConnected) {
+    ensureDailySparkGrant(false);
+  }
+
   const round = getActiveRound();
   renderWallet();
   renderHero(round);
@@ -654,7 +913,7 @@ function render() {
   renderMonthlyChart(round);
   renderSentiment(round);
   renderRoundDetails(round);
-  renderLeaderboard(round);
+  renderLeaderboard();
   renderHistory();
   renderProfile();
   populateAdminForm(round);
@@ -664,15 +923,21 @@ function render() {
 }
 
 function renderWallet() {
-  els.walletButton.textContent = walletConnected ? shortWallet(DEMO_WALLET) : "Connect Wallet";
+  if (!walletConnected) {
+    els.walletButton.textContent = "Connect Wallet";
+    return;
+  }
+
+  els.walletButton.textContent = `${shortWallet(DEMO_WALLET)} - ${getUser().sparkBalance} Sparks`;
 }
 
 function renderHero(round) {
   const status = effectiveStatus(round);
+  const yieldPercent = estimatedAnnualizedYieldPercent();
   els.pulseRoundPill.innerHTML = `
     <span>${round.roundDate}</span>
     <strong>${status.toUpperCase()}</strong>
-    <small>local trading day</small>
+    <small>HKT trading day</small>
   `;
   els.pulseHeaderMetric.innerHTML = `
     <span>Spot</span>
@@ -684,39 +949,61 @@ function renderHero(round) {
     <strong>${formatPrice(round.currentPrice)}</strong>
     <small>demo feed</small>
   `;
-  els.heroRewardPool.textContent = formatUsdtFromCents(round.rewardPoolCents).replace(".00", "");
-  els.heroMaxWinners.textContent = String(round.maxWinners);
+  els.heroRewardPool.textContent = walletConnected ? formatSparkAmount(getUser().sparkBalance) : "10 Sparks";
+  els.heroMaxWinners.textContent = `${Math.round(yieldPercent)}%`;
 }
 
 function renderRound(round) {
   const status = effectiveStatus(round);
   const prediction = walletConnected ? currentWalletPrediction(round) : null;
-  const canPredict = walletConnected && status === "open" && !prediction;
+  const canSubmit = walletConnected && status === "open" && !prediction;
+  const canEdit = walletConnected && status === "open" && prediction && Number(prediction.editCount || 0) < 1;
+  const canChoose = canSubmit || canEdit;
+  const amountValue = prediction && document.activeElement !== els.sparkBetAmount
+    ? prediction.amountSparks
+    : betAmountFromInput();
 
   els.roundStatusPill.textContent = status;
-  els.pulseQuestionText.textContent = `Will silver price close above ${formatPrice(round.openingPrice)}?`;
+  els.pulseQuestionText.textContent = `Will silver close above ${formatPrice(round.openingPrice)} by 10:00 AM HKT?`;
   els.openingPriceValue.textContent = formatPrice(round.openingPrice);
   els.currentPriceValue.textContent = formatPrice(round.currentPrice);
-  els.cutoffValue.textContent = "10:00 London";
+  els.cutoffValue.textContent = "10:00 AM HKT";
+
+  if (els.sparkBetAmount && document.activeElement !== els.sparkBetAmount) {
+    els.sparkBetAmount.value = String(amountValue);
+  }
+  renderBetAmountUi(amountValue);
+
+  const dailyRemaining = remainingDailyBetForWallet(round, DEMO_WALLET, prediction?.id || null);
+  if (els.betLimitText) {
+    if (!prediction) {
+      els.betLimitText.textContent = `${GAME_RULES.minBetSparks} Sparks minimum, ${GAME_RULES.maxDailyBetSparks} Sparks daily max.`;
+    } else if (Number(prediction.editCount || 0) < 1) {
+      els.betLimitText.textContent = `One edit allowed. New amount can be ${GAME_RULES.minBetSparks}-${dailyRemaining} Sparks.`;
+    } else {
+      els.betLimitText.textContent = "Edit used. The latest valid guess will settle.";
+    }
+  }
 
   [els.predictUpButton, els.predictDownButton].forEach((button) => {
     const selected = prediction && prediction.side === button.dataset.side;
-    button.disabled = !canPredict;
+    button.disabled = !canChoose;
     button.classList.toggle("is-selected", Boolean(selected));
   });
 
   if (!walletConnected) {
     els.userPredictionStatus.innerHTML = `
       <span>Status</span>
-      <strong>Connect demo wallet to submit</strong>
+      <strong>Connect wallet to enter paper mode</strong>
     `;
     return;
   }
 
   if (prediction) {
+    const editText = canEdit ? "1 edit available" : "edit used";
     els.userPredictionStatus.innerHTML = `
-      <span>Prediction locked</span>
-      <strong>You predicted ${prediction.side} at ${formatDateTime(prediction.createdAt)}</strong>
+      <span>Latest valid guess</span>
+      <strong>${prediction.side} - ${formatSparkAmount(prediction.amountSparks)} - ${prediction.mode === "real" ? "real" : "paper"} - ${editText}</strong>
     `;
     return;
   }
@@ -724,15 +1011,25 @@ function renderRound(round) {
   if (status !== "open") {
     els.userPredictionStatus.innerHTML = `
       <span>Status</span>
-      <strong>Round is ${status}</strong>
+      <strong>Trading day is ${status}</strong>
     `;
     return;
   }
 
   els.userPredictionStatus.innerHTML = `
     <span>Status</span>
-    <strong>Choose UP or DOWN before cutoff</strong>
+    <strong>Choose UP or DOWN during the HKT trading window</strong>
   `;
+}
+
+function renderBetAmountUi(amountSparks = betAmountFromInput()) {
+  if (els.betAmountDisplay) {
+    els.betAmountDisplay.textContent = String(amountSparks);
+  }
+
+  document.querySelectorAll("[data-bet-amount]").forEach((button) => {
+    button.classList.toggle("is-active", Number(button.dataset.betAmount) === Number(amountSparks));
+  });
 }
 
 function renderSentiment(round) {
@@ -874,19 +1171,24 @@ function syncPulseHeaderSpot() {
 
 function renderRoundDetails(round) {
   const scorePreview = scorePreviewForWallet(round);
+  const bonusPreview = selectedBonusPreview(scorePreview);
 
   els.roundDetailStats.innerHTML = `
+    <div class="stat">
+      <span class="metric-label">Session</span>
+      <strong class="metric-value">${formatHkDateTime(round.startTime)} - ${formatHkDateTime(round.predictionCutoffTime)}</strong>
+    </div>
     <div class="stat">
       <span class="metric-label">Resolve</span>
       <strong class="metric-value"><a class="text-link" href="https://www.lbma.org.uk/prices-and-data/precious-metal-prices" target="_blank" rel="noreferrer">LBMA silver price</a></strong>
     </div>
   `;
 
-  document.querySelector("#potentialScoreValue").textContent = `${scorePreview.score} pts`;
-  document.querySelector("#basePointValue").textContent = String(SCORE_RULES.basePoints);
-  document.querySelector("#timeBonusValue").textContent = formatMultiplier(scorePreview.timeBonus);
-  document.querySelector("#streakBonusValue").textContent = formatMultiplier(scorePreview.streakMultiplier);
-  document.querySelector("#streakCountValue").textContent = `${scorePreview.currentWinStreak} win${scorePreview.currentWinStreak === 1 ? "" : "s"}`;
+  document.querySelector("#potentialScoreValue").textContent = `${scorePreview.sparkProfit} Sparks`;
+  document.querySelector("#basePointValue").textContent = formatSparkAmount(scorePreview.amountSparks);
+  document.querySelector("#bonusLabelValue").textContent = bonusPreview.label;
+  document.querySelector("#bonusMultiplierValue").textContent = formatMultiplier(bonusPreview.multiplier);
+  document.querySelector("#bonusMetaValue").textContent = bonusPreview.meta;
 }
 
 function leaderboardWeeks(state = pulseState) {
@@ -924,89 +1226,97 @@ function weekLabel(weekKey) {
   return `${formatter.format(start)} - ${formatter.format(end)}`;
 }
 
-function dateFromDateKey(dateKey) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
+function renderLeaderboard() {
+  const rows = allTimeLeaderboardRows();
 
-function renderLeaderboard(round) {
-  const weeks = leaderboardWeeks();
+  els.leaderboardWeekSelect.innerHTML = `<option value="all-time">All time</option>`;
+  els.leaderboardWeekSelect.disabled = true;
 
-  if (!weeks.length) {
-    els.leaderboardSummary.textContent = "No settled rounds yet.";
-    els.leaderboardWeekSelect.innerHTML = `<option value="">No weeks</option>`;
+  if (!rows.length) {
+    els.leaderboardSummary.textContent = "No settled Spark totals yet.";
     els.leaderboardWeekSelect.disabled = true;
-    els.leaderboardPanel.innerHTML = `<div class="empty-state">Winners will appear after the first settled round.</div>`;
+    els.leaderboardPanel.innerHTML = `<div class="empty-state">All-time Spark totals will appear after the first settled winner.</div>`;
     return;
   }
 
-  if (!selectedLeaderboardWeekKey || !weeks.some((week) => week.key === selectedLeaderboardWeekKey)) {
-    selectedLeaderboardWeekKey = weeks[0].key;
-  }
-
-  els.leaderboardWeekSelect.disabled = false;
-  els.leaderboardWeekSelect.innerHTML = weeks
-    .map((week) => `<option value="${week.key}"${week.key === selectedLeaderboardWeekKey ? " selected" : ""}>${week.label}</option>`)
-    .join("");
-
-  const selectedWeek = weeks.find((week) => week.key === selectedLeaderboardWeekKey) || weeks[0];
-  const winners = selectedWeek.rounds.flatMap((settledRound) => {
-    return leaderboardRows(settledRound)
-      .filter((row) => row.reward)
-      .map((row) => ({ ...row, round: settledRound }));
-  });
-
-  els.leaderboardSummary.textContent = winners.length
-    ? `${winners.length} paid winner${winners.length === 1 ? "" : "s"} across ${selectedWeek.rounds.length} settled trading day${selectedWeek.rounds.length === 1 ? "" : "s"}.`
-    : `No paid winners for ${selectedWeek.label}.`;
-
-  if (!winners.length) {
-    els.leaderboardPanel.innerHTML = `<div class="empty-state">No winners recorded for ${selectedWeek.label}.</div>`;
-    return;
-  }
+  els.leaderboardSummary.textContent = `${rows.length} wallet${rows.length === 1 ? "" : "s"} ranked by all-time Sparks.`;
 
   els.leaderboardPanel.innerHTML = `
-    <div class="pulse-table weekly-winners-table">
+    <div class="pulse-table all-time-leaderboard-table">
       <div class="pulse-table-row pulse-table-head">
-        <span>Date</span>
         <span>Rank</span>
         <span>User</span>
-        <span>Side</span>
-        <span>Score</span>
-        <span>Reward</span>
-        <span>Status</span>
+        <span>Total Sparks</span>
+        <span>Wins</span>
+        <span>Best Multiplier</span>
+        <span>Latest Win</span>
+        <span>Avg Bet</span>
       </div>
-      ${winners.map((row) => renderWeeklyWinnerRow(row)).join("")}
+      ${rows.map((row) => renderAllTimeLeaderboardRow(row)).join("")}
     </div>
   `;
 }
 
-function renderWeeklyWinnerRow(row) {
+function allTimeLeaderboardRows() {
+  const byWallet = new Map();
+  const roundsById = new Map(pulseState.rounds.map((round) => [round.id, round]));
+  const predictionsByKey = new Map(
+    pulseState.predictions.map((prediction) => [`${prediction.roundId}-${prediction.wallet}`, prediction])
+  );
+
+  pulseState.rewards.forEach((reward) => {
+    const round = roundsById.get(reward.roundId);
+    if (!round || round.status !== "settled") {
+      return;
+    }
+
+    const prediction = predictionsByKey.get(`${reward.roundId}-${reward.wallet}`);
+    const existing = byWallet.get(reward.wallet) || {
+      wallet: reward.wallet,
+      totalSparks: 0,
+      wins: 0,
+      totalBet: 0,
+      bestMultiplier: 1,
+      latestWin: ""
+    };
+
+    existing.totalSparks += Number(reward.sparkProfit || 0);
+    existing.wins += 1;
+    existing.totalBet += Number(prediction?.amountSparks || 0);
+    existing.bestMultiplier = Math.max(existing.bestMultiplier, Number(reward.finalMultiplier || 1));
+    existing.latestWin = !existing.latestWin || round.roundDate > existing.latestWin ? round.roundDate : existing.latestWin;
+    byWallet.set(reward.wallet, existing);
+  });
+
+  return Array.from(byWallet.values())
+    .map((row) => ({
+      ...row,
+      averageBet: row.wins ? Math.round(row.totalBet / row.wins) : 0
+    }))
+    .sort((a, b) => {
+      if (b.totalSparks !== a.totalSparks) {
+        return b.totalSparks - a.totalSparks;
+      }
+
+      if (b.wins !== a.wins) {
+        return b.wins - a.wins;
+      }
+
+      return a.wallet.localeCompare(b.wallet);
+    })
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function renderAllTimeLeaderboardRow(row) {
   return `
     <div class="pulse-table-row is-winner">
-      <span>${row.round.roundDate}</span>
-      <span>#${row.reward.rank}</span>
-      <span>${shortWallet(row.prediction.wallet)}</span>
-      <span>${row.prediction.side}</span>
-      <span>${row.score}</span>
-      <span>${formatUsdtFromCents(row.reward.rewardAmountCents)}</span>
-      <span>${row.reward.status}</span>
-    </div>
-  `;
-}
-
-function renderLeaderboardRow(row) {
-  const rank = row.rank ? `#${row.rank}` : "-";
-  const reward = row.reward ? `${formatUsdtFromCents(row.reward.rewardAmountCents)} ${row.reward.status}` : row.rewardLabel;
-  return `
-    <div class="pulse-table-row ${row.reward ? "is-winner" : ""}">
-      <span>${rank}</span>
-      <span>${shortWallet(row.prediction.wallet)}</span>
-      <span>${row.prediction.side}</span>
-      <span>${formatDateTime(row.prediction.createdAt)}</span>
-      <span>${row.resultLabel}</span>
-      <span>${row.score || "-"}</span>
-      <span>${reward}</span>
+      <span>#${row.rank}</span>
+      <span>${shortWallet(row.wallet)}</span>
+      <span>${formatSparkAmount(row.totalSparks)}</span>
+      <span>${row.wins}</span>
+      <span>${formatMultiplier(row.bestMultiplier)}</span>
+      <span>${row.latestWin || "-"}</span>
+      <span>${formatSparkAmount(row.averageBet)}</span>
     </div>
   `;
 }
@@ -1033,16 +1343,16 @@ function leaderboardRows(round) {
       const rank = isCorrect ? correctRank.get(prediction.wallet) : null;
       const score = isCorrect ? calculateScore(prediction, round) : 0;
       let resultLabel = "Incorrect";
-      let rewardLabel = "No reward";
+      let rewardLabel = "No Spark profit";
 
       if (round.winningSide === "FLAT") {
         resultLabel = "Flat round";
-        rewardLabel = "No payout";
+        rewardLabel = "Stake returned";
       } else if (isCorrect && reward) {
         resultLabel = "Correct";
       } else if (isCorrect) {
         resultLabel = "Correct";
-        rewardLabel = "Correct, outside top winners";
+        rewardLabel = "Pending settlement";
       }
 
       return {
@@ -1089,48 +1399,60 @@ function calculateScore(prediction, round) {
     return 0;
   }
 
-  const timeBonus = timeBonusForPrediction(prediction, round);
-  const streakMultiplier = streakMultiplierForPrediction(prediction, round);
-
-  return Math.round(SCORE_RULES.basePoints * timeBonus * streakMultiplier);
+  return calculatePredictionOutcome(prediction, round).sparkProfit;
 }
 
-function timeBonusForPrediction(prediction, round) {
-  const hoursToCutoff = Math.max(
-    0,
-    (new Date(round.predictionCutoffTime).getTime() - new Date(prediction.createdAt).getTime()) / 3600000
-  );
-  const tier = SCORE_RULES.timeBonusTiers.find((item) => hoursToCutoff >= item.minHoursToCutoff);
-  return tier ? tier.multiplier : 1;
+function calculatePredictionOutcome(prediction, round) {
+  const priorWinStreak = prediction.priorWinStreak ?? calculatePriorWinStreak(prediction.wallet, round.roundDate);
+  const streakMultiplier = streakMultiplierForPriorWins(priorWinStreak);
+  const stakingMultiplier = Number(prediction.stakingMultiplier || 1);
+  const finalMultiplier = Math.max(stakingMultiplier, streakMultiplier);
+  const sparkProfit = Math.round(Number(prediction.amountSparks || 0) * finalMultiplier);
+
+  return {
+    priorWinStreak,
+    streakMultiplier,
+    stakingMultiplier,
+    finalMultiplier,
+    returnedStake: Number(prediction.amountSparks || 0),
+    sparkProfit
+  };
 }
 
-function streakMultiplierForPrediction(prediction, round) {
-  const currentWinStreak = currentWinStreakForPrediction(prediction, round);
-  const rule = SCORE_RULES.streakMultipliers.find((item) => currentWinStreak >= item.wins);
+function streakMultiplierForPriorWins(priorWinStreak) {
+  const rule = GAME_RULES.streakMultipliers.find((item) => priorWinStreak >= item.priorWins);
   return rule ? rule.multiplier : 1;
 }
 
-function currentWinStreakForPrediction(prediction, round) {
-  const priorWinStreak = prediction.priorWinStreak ?? calculatePriorWinStreak(prediction.wallet, round.roundDate);
-  return priorWinStreak + 1;
-}
-
 function scorePreviewForWallet(round) {
-  const prediction = currentWalletPrediction(round) || {
-    wallet: DEMO_WALLET,
-    side: "UP",
-    createdAt: new Date().toISOString(),
-    priorWinStreak: walletConnected ? calculatePriorWinStreak(DEMO_WALLET, round.roundDate) : 0
-  };
-  const timeBonus = timeBonusForPrediction(prediction, round);
-  const streakMultiplier = streakMultiplierForPrediction(prediction, round);
-  const currentWinStreak = currentWinStreakForPrediction(prediction, round);
+  const prediction = currentWalletPrediction(round);
+  const amountSparks = prediction ? prediction.amountSparks : betAmountFromInput();
+  const priorWinStreak = prediction?.priorWinStreak ?? (walletConnected ? calculatePriorWinStreak(DEMO_WALLET, round.roundDate) : 0);
+  const streakMultiplier = streakMultiplierForPriorWins(priorWinStreak);
+  const stakingMultiplier = isUserStaked() ? GAME_RULES.stakeWinMultiplier : 1;
+  const finalMultiplier = Math.max(stakingMultiplier, streakMultiplier);
 
   return {
-    timeBonus,
+    amountSparks,
+    priorWinStreak,
     streakMultiplier,
-    currentWinStreak,
-    score: Math.round(SCORE_RULES.basePoints * timeBonus * streakMultiplier)
+    stakingMultiplier,
+    finalMultiplier,
+    sparkProfit: Math.round(amountSparks * finalMultiplier)
+  };
+}
+
+function selectedBonusPreview(scorePreview) {
+  const useStreakBonus = scorePreview.streakMultiplier >= scorePreview.stakingMultiplier;
+  const multiplier = useStreakBonus ? scorePreview.streakMultiplier : scorePreview.stakingMultiplier;
+  const isMax = multiplier >= GAME_RULES.stakeWinMultiplier;
+
+  return {
+    label: useStreakBonus ? "Streak bonus" : "Stake bonus",
+    multiplier,
+    meta: isMax
+      ? "MAX"
+      : `${scorePreview.priorWinStreak} prior win${scorePreview.priorWinStreak === 1 ? "" : "s"}`
   };
 }
 
@@ -1162,50 +1484,125 @@ function renderHistory() {
         <span>Open</span>
         <span>Close</span>
         <span>Winning Side</span>
-        <span>Reward Pool</span>
+        <span>Payouts</span>
+        <span>Session</span>
       </div>
-      ${rounds.map((round) => `
-        <div class="pulse-table-row">
-          <span>${round.roundDate}</span>
-          <span>${effectiveStatus(round)}</span>
-          <span>${formatPrice(round.openingPrice)}</span>
-          <span>${formatPrice(round.closingPrice)}</span>
-          <span>${round.winningSide || "-"}</span>
-          <span>${formatUsdtFromCents(round.rewardPoolCents)}</span>
-        </div>
-      `).join("")}
+      ${rounds.map((round) => {
+        const payoutCount = rewardsForRound(round.id).length;
+        return `
+          <div class="pulse-table-row">
+            <span>${round.roundDate}</span>
+            <span>${effectiveStatus(round)}</span>
+            <span>${formatPrice(round.openingPrice)}</span>
+            <span>${formatPrice(round.closingPrice)}</span>
+            <span>${round.winningSide || "-"}</span>
+            <span>${payoutCount} Spark payout${payoutCount === 1 ? "" : "s"}</span>
+            <span>12 PM-10 AM HKT</span>
+          </div>
+        `;
+      }).join("")}
     </div>
   `;
 }
 
 function renderProfile() {
   if (!walletConnected) {
-    els.profilePanel.innerHTML = `<div class="empty-state">Connect the demo wallet to view local prediction history.</div>`;
+    els.profilePanel.innerHTML = `<div class="empty-state">Connect wallet to view Sparks, staking, missions, and local guess history.</div>`;
     return;
   }
 
+  const user = getUser();
   const predictions = pulseState.predictions
     .filter((prediction) => prediction.wallet === DEMO_WALLET)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  if (!predictions.length) {
-    els.profilePanel.innerHTML = `<div class="empty-state">No predictions from ${shortWallet(DEMO_WALLET)} yet.</div>`;
-    return;
-  }
+  const missions = missionStatus();
 
   els.profilePanel.innerHTML = `
-    <div class="pulse-table">
-      <div class="pulse-table-row pulse-table-head">
-        <span>Round</span>
-        <span>Prediction</span>
-        <span>Submitted</span>
-        <span>Result</span>
-        <span>Score</span>
-        <span>Reward</span>
+    <div class="profile-economy">
+      <div class="profile-card">
+        <span class="metric-label">Spark Balance</span>
+        <strong>${formatSparkAmount(user.sparkBalance)}</strong>
+        <small>${user.sparkBalance > GAME_RULES.freeSparkCap ? "Daily free Sparks paused above 100." : `Next eligible daily reward: ${GAME_RULES.dailySparks} Sparks.`}</small>
       </div>
-      ${predictions.map((prediction) => renderProfileRow(prediction)).join("")}
+      <div class="profile-card">
+        <span class="metric-label">Mode</span>
+        <strong>${currentModeLabel()}</strong>
+        <small>${stakeStatusText()}</small>
+        <div class="profile-actions">
+          ${stakeActionButton()}
+        </div>
+      </div>
+      <div class="profile-card">
+        <span class="metric-label">Redeem</span>
+        <strong>${GAME_RULES.sparksPerUsdt.toLocaleString("en-US")} Sparks = 1 USDT</strong>
+        <small>${isUserStaked() ? "Trading Mode wallets can redeem Sparks." : "Stake 1 STT to unlock redemption."}</small>
+        <div class="profile-actions">
+          <button class="ghost-button compact" type="button" data-profile-action="redeem">Redeem 1 USDT</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mission-grid">
+      ${renderMissionCard("streak", "01", "5-Day Guess", `Submit guesses for 5 consecutive trading days in the same Monday-Friday week.`, missions.fiveDayWeek, GAME_RULES.missionRewards.fiveDayWeek)}
+      ${renderMissionCard("win", "02", "First Daily Win", "Score your first winning guess of a day.", missions.firstWinningGuess, GAME_RULES.missionRewards.firstWinningGuess)}
+      ${renderMissionCard("stake", "03", "Stake STT", "Stake 1 STT for at least one week to unlock Trading Mode.", missions.stakeStt, GAME_RULES.missionRewards.stakeStt)}
+    </div>
+
+    ${predictions.length ? `
+      <div class="pulse-table profile-history-table">
+        <div class="pulse-table-row pulse-table-head">
+          <span>Round</span>
+          <span>Guess</span>
+          <span>Bet</span>
+          <span>Mode</span>
+          <span>Result</span>
+          <span>Net Sparks</span>
+          <span>History</span>
+        </div>
+        ${predictions.map((prediction) => renderProfileRow(prediction)).join("")}
+      </div>
+    ` : `<div class="empty-state">No guesses from ${shortWallet(DEMO_WALLET)} yet.</div>`}
+  `;
+}
+
+function renderMissionCard(type, step, title, body, complete, reward) {
+  return `
+    <div class="mission-card mission-${type} ${complete ? "is-complete" : ""}">
+      <div class="mission-head">
+        <span>${step}</span>
+        <small>${complete ? "Complete" : "Open"}</small>
+      </div>
+      <strong>${title}</strong>
+      <p>${body}</p>
+      <div class="mission-reward">
+        <span>Reward</span>
+        <strong>${formatSparkAmount(reward)}</strong>
+      </div>
     </div>
   `;
+}
+
+function stakeStatusText() {
+  if (!isUserStaked()) {
+    return `Unlock ${formatMultiplier(GAME_RULES.stakeWinMultiplier)} wins and estimated ${Math.round(estimatedAnnualizedYieldPercent())}% annualized Spark earning yield.`;
+  }
+
+  const unlockAt = stakeUnlockTime();
+  if (unlockAt && Date.now() < new Date(unlockAt).getTime()) {
+    return `Locked until ${formatHkDateTime(unlockAt)} HKT.`;
+  }
+
+  return "Stake unlocked. You can unstake anytime.";
+}
+
+function stakeActionButton() {
+  if (!isUserStaked()) {
+    return `<button class="primary-button compact" type="button" data-profile-action="stake">Stake 1 STT</button>`;
+  }
+
+  const unlockAt = stakeUnlockTime();
+  const disabled = unlockAt && Date.now() < new Date(unlockAt).getTime();
+  return `<button class="ghost-button compact" type="button" data-profile-action="unstake"${disabled ? " disabled" : ""}>Unstake STT</button>`;
 }
 
 function renderProfileRow(prediction) {
@@ -1214,19 +1611,45 @@ function renderProfileRow(prediction) {
   const settled = round && round.status === "settled";
   const correct = settled && prediction.side === round.winningSide && round.winningSide !== "FLAT";
   const result = !settled ? "Pending" : correct ? "Correct" : round.winningSide === "FLAT" ? "Flat" : "Incorrect";
-  const score = correct ? calculateScore(prediction, round) : settled ? "0" : "-";
-  const rewardText = reward ? `${formatUsdtFromCents(reward.rewardAmountCents)} ${reward.status}` : "-";
+  const netText = reward
+    ? `+${formatSparkAmount(reward.sparkProfit)}`
+    : settled && round.winningSide === "FLAT"
+      ? `+${formatSparkAmount(prediction.amountSparks)} returned`
+      : settled
+        ? `-${formatSparkAmount(prediction.amountSparks)}`
+        : "Pending";
 
   return `
     <div class="pulse-table-row">
       <span>${round ? round.roundDate : prediction.roundId}</span>
       <span>${prediction.side}</span>
-      <span>${formatDateTime(prediction.createdAt)}</span>
+      <span>${formatSparkAmount(prediction.amountSparks)}</span>
+      <span>${prediction.mode === "real" ? "Real" : "Paper"}</span>
       <span>${result}</span>
-      <span>${score}</span>
-      <span>${rewardText}</span>
+      <span>${netText}</span>
+      <span>${formatPredictionHistory(prediction)}</span>
     </div>
   `;
+}
+
+function formatPredictionHistory(prediction) {
+  const history = Array.isArray(prediction.history) ? prediction.history : [];
+  if (!history.length) {
+    return formatDateTime(prediction.createdAt);
+  }
+
+  return history
+    .map((item) => `${item.action === "edited" ? "Edited" : "Submitted"} ${item.side}/${item.amountSparks}`)
+    .join("; ");
+}
+
+function missionStatus() {
+  const user = getUser();
+  return {
+    fiveDayWeek: user.missions.fiveDayWeeks.length > 0,
+    firstWinningGuess: user.missions.firstWinRewarded,
+    stakeStt: user.missions.stakeRewarded
+  };
 }
 
 function populateAdminForm(round) {
@@ -1234,8 +1657,9 @@ function populateAdminForm(round) {
   els.adminCurrentPrice.value = round.currentPrice ?? "";
   els.adminClosingPrice.value = round.closingPrice ?? "";
   els.adminRewardPool.value = (round.rewardPoolCents / 100).toFixed(2);
-  els.adminMaxWinners.value = round.maxWinners;
+  els.adminMaxWinners.value = round.maxWinners || "";
   els.adminStatus.value = round.status;
+  els.adminSparkBalance.value = getUser().sparkBalance;
   els.adminOverride.value = round.resultOverride || "";
   els.adminCutoffTime.value = toDatetimeLocalValue(round.predictionCutoffTime);
   els.adminSettlementTime.value = toDatetimeLocalValue(round.settlementTime);
@@ -1243,31 +1667,55 @@ function populateAdminForm(round) {
 
 function saveRoundFromAdmin(showSavedToast = true) {
   const round = getActiveRound();
+  const user = getUser();
+  const nextSparkBalance = Math.max(0, Math.floor(Number(els.adminSparkBalance.value || user.sparkBalance)));
+  const sparkBalanceDelta = nextSparkBalance - user.sparkBalance;
+
   round.openingPrice = Number(els.adminOpeningPrice.value);
   round.currentPrice = Number(els.adminCurrentPrice.value);
   round.closingPrice = els.adminClosingPrice.value ? Number(els.adminClosingPrice.value) : null;
   round.rewardPoolCents = Math.round(Number(els.adminRewardPool.value || 0) * 100);
-  round.maxWinners = Math.max(1, Math.floor(Number(els.adminMaxWinners.value || 20)));
+  round.maxWinners = Math.max(0, Math.floor(Number(els.adminMaxWinners.value || 0)));
   round.status = els.adminStatus.value;
   round.resultOverride = els.adminOverride.value;
   round.predictionCutoffTime = fromDatetimeLocalValue(els.adminCutoffTime.value) || round.predictionCutoffTime;
   round.settlementTime = fromDatetimeLocalValue(els.adminSettlementTime.value) || round.settlementTime;
   round.updatedAt = new Date().toISOString();
 
+  if (sparkBalanceDelta !== 0) {
+    applySparkChange(sparkBalanceDelta, "admin-adjust", "Admin Spark balance adjustment", round.id);
+  }
+
   saveState();
   render();
 
   if (showSavedToast) {
-    showToast("Round settings saved.");
+    showToast(sparkBalanceDelta !== 0 ? `Round saved. Spark balance set to ${nextSparkBalance}.` : "Round settings saved.");
   }
+}
+
+function betAmountFromInput() {
+  return clampInteger(els.sparkBetAmount?.value || GAME_RULES.minBetSparks, GAME_RULES.minBetSparks, GAME_RULES.maxDailyBetSparks);
+}
+
+function setBetAmount(amountSparks) {
+  const amount = clampInteger(amountSparks, GAME_RULES.minBetSparks, GAME_RULES.maxDailyBetSparks);
+  if (els.sparkBetAmount) {
+    els.sparkBetAmount.value = String(amount);
+  }
+  renderBetAmountUi(amount);
+  renderRoundDetails(getActiveRound());
 }
 
 function submitPrediction(side) {
   const round = getActiveRound();
   const status = effectiveStatus(round);
+  const existingPrediction = currentWalletPrediction(round);
+  const amountSparks = betAmountFromInput();
+  const remaining = remainingDailyBetForWallet(round, DEMO_WALLET, existingPrediction?.id || null);
 
   if (!walletConnected) {
-    showToast("Connect the demo wallet first.");
+    showToast("Connect the wallet first.");
     return;
   }
 
@@ -1277,30 +1725,173 @@ function submitPrediction(side) {
   }
 
   if (status !== "open") {
-    showToast(`Prediction is closed because the round is ${status}.`);
+    showToast(`Guessing is closed because the trading day is ${status}.`);
     return;
   }
 
-  if (currentWalletPrediction(round)) {
-    showToast("You already submitted a prediction for this round.");
+  if (amountSparks < GAME_RULES.minBetSparks || amountSparks > GAME_RULES.maxDailyBetSparks) {
+    showToast(`Enter ${GAME_RULES.minBetSparks}-${GAME_RULES.maxDailyBetSparks} Sparks.`);
     return;
   }
 
+  if (amountSparks > remaining) {
+    showToast(`Daily max is ${GAME_RULES.maxDailyBetSparks} Sparks.`);
+    return;
+  }
+
+  if (existingPrediction) {
+    if (Number(existingPrediction.editCount || 0) >= 1) {
+      showToast("You already used today's edit.");
+      return;
+    }
+
+    const difference = amountSparks - Number(existingPrediction.amountSparks || 0);
+    if (difference > 0 && getUser().sparkBalance < difference) {
+      showToast("Not enough Sparks to increase this guess.");
+      return;
+    }
+
+    openGuessConfirmation({
+      mode: "edit",
+      roundId: round.id,
+      side,
+      amountSparks
+    });
+    return;
+  }
+
+  if (getUser().sparkBalance < amountSparks) {
+    showToast("Not enough Sparks for this guess.");
+    return;
+  }
+
+  openGuessConfirmation({
+    mode: "submit",
+    roundId: round.id,
+    side,
+    amountSparks
+  });
+}
+
+function openGuessConfirmation(intent) {
+  pendingGuess = intent;
+
+  els.guessConfirmText.textContent = intent.mode === "edit"
+    ? `Are you sure you want to change your guess to "${intent.side}" with ${intent.amountSparks} Sparks?`
+    : `Are you sure you want to bet ${intent.amountSparks} Sparks on "${intent.side}"?`;
+  els.guessConfirmMode.textContent = currentModeLabel();
+  els.guessConfirmModeMeta.textContent = currentModeMeta();
+  els.guessConfirmModal.classList.add("is-visible");
+  els.guessConfirmModal.setAttribute("aria-hidden", "false");
+  els.confirmGuessButton.focus();
+}
+
+function closeGuessConfirmation() {
+  pendingGuess = null;
+  els.guessConfirmModal.classList.remove("is-visible");
+  els.guessConfirmModal.setAttribute("aria-hidden", "true");
+}
+
+function confirmPendingGuess() {
+  if (!pendingGuess) {
+    return;
+  }
+
+  const round = pulseState.rounds.find((item) => item.id === pendingGuess.roundId);
+  if (!round || effectiveStatus(round) !== "open") {
+    closeGuessConfirmation();
+    showToast("Guessing is no longer open.");
+    return;
+  }
+
+  const existingPrediction = currentWalletPrediction(round);
+  const intent = pendingGuess;
+  closeGuessConfirmation();
+
+  if (intent.mode === "edit" && existingPrediction) {
+    editPrediction(existingPrediction, round, intent.side, intent.amountSparks);
+    return;
+  }
+
+  if (intent.mode === "submit" && !existingPrediction) {
+    commitNewPrediction(round, intent.side, intent.amountSparks);
+    return;
+  }
+
+  showToast("This guess has already changed. Review it and try again.");
+}
+
+function commitNewPrediction(round, side, amountSparks) {
+  const now = new Date().toISOString();
+  applySparkChange(-amountSparks, "bet", `Daily guess: ${side}`, round.id);
   pulseState.predictions.push({
     id: `PR-${round.id}-${DEMO_WALLET.slice(-6)}-${Date.now()}`,
     roundId: round.id,
     wallet: DEMO_WALLET,
     side,
-    createdAt: new Date().toISOString(),
+    amountSparks,
+    mode: isUserStaked() ? "real" : "paper",
+    stakingMultiplier: isUserStaked() ? GAME_RULES.stakeWinMultiplier : 1,
+    createdAt: now,
+    updatedAt: now,
+    editCount: 0,
+    history: [{
+      action: "submitted",
+      side,
+      amountSparks,
+      mode: isUserStaked() ? "real" : "paper",
+      createdAt: now
+    }],
     priorWinStreak: calculatePriorWinStreak(DEMO_WALLET, round.roundDate),
     score: null,
     result: null
   });
 
+  awardFiveDayMissionIfEarned();
   saveState();
   launchPredictionCelebration(side, side === "UP" ? els.predictUpButton : els.predictDownButton);
   render();
-  showToast(`Prediction locked: ${side}.`);
+  showToast(`Guess submitted: ${side} for ${amountSparks} Sparks.`);
+}
+
+function editPrediction(prediction, round, side, amountSparks) {
+  if (Number(prediction.editCount || 0) >= 1) {
+    showToast("You already used today's edit.");
+    return;
+  }
+
+  const difference = amountSparks - Number(prediction.amountSparks || 0);
+  if (difference > 0 && getUser().sparkBalance < difference) {
+    showToast("Not enough Sparks to increase this guess.");
+    return;
+  }
+
+  if (difference !== 0) {
+    applySparkChange(-difference, difference > 0 ? "bet-increase" : "bet-refund", difference > 0 ? "Increased daily guess" : "Reduced daily guess", round.id);
+  }
+
+  const now = new Date().toISOString();
+  prediction.side = side;
+  prediction.amountSparks = amountSparks;
+  prediction.mode = isUserStaked() ? "real" : "paper";
+  prediction.stakingMultiplier = isUserStaked() ? GAME_RULES.stakeWinMultiplier : 1;
+  prediction.editCount = Number(prediction.editCount || 0) + 1;
+  prediction.updatedAt = now;
+  prediction.history = [
+    ...(Array.isArray(prediction.history) ? prediction.history : []),
+    {
+      action: "edited",
+      side,
+      amountSparks,
+      mode: prediction.mode,
+      createdAt: now
+    }
+  ];
+
+  saveState();
+  launchPredictionCelebration(side, side === "UP" ? els.predictUpButton : els.predictDownButton);
+  render();
+  showToast(`Guess updated: ${side} for ${amountSparks} Sparks.`);
 }
 
 function settleActiveRound() {
@@ -1323,8 +1914,7 @@ function settleActiveRound() {
         score: calculateScoreWithSide(prediction, round, winningSide)
       }))
       .sort(compareScoredPredictions);
-  const winners = correctPredictions.slice(0, round.maxWinners);
-  const rewards = createRewards(round, winners);
+  const rewards = createRewards(round, correctPredictions);
 
   round.winningSide = winningSide;
   round.status = "settled";
@@ -1337,9 +1927,10 @@ function settleActiveRound() {
     }
 
     const isCorrect = winningSide !== "FLAT" && prediction.side === winningSide;
+    const isFlat = winningSide === "FLAT";
     return {
       ...prediction,
-      result: isCorrect ? "correct" : winningSide === "FLAT" ? "flat" : "incorrect",
+      result: isCorrect ? "correct" : isFlat ? "flat" : "incorrect",
       score: isCorrect ? calculateScoreWithSide(prediction, round, winningSide) : 0
     };
   });
@@ -1348,9 +1939,38 @@ function settleActiveRound() {
     ...rewards
   ];
 
+  settleWalletSparkLedger(round, winningSide);
   saveState();
   render();
-  showToast(winners.length ? `${winners.length} reward record(s) created.` : "Round settled with no payout.");
+  showToast(rewards.length ? `${rewards.length} Spark payout record(s) created.` : "Trading day settled with no winners.");
+}
+
+function settleWalletSparkLedger(round, winningSide) {
+  const prediction = pulseState.predictions.find((item) => item.roundId === round.id && item.wallet === DEMO_WALLET);
+
+  if (!prediction || prediction.settledLedgerApplied) {
+    return;
+  }
+
+  if (winningSide === "FLAT") {
+    applySparkChange(prediction.amountSparks, "flat-refund", "Flat round stake returned", round.id);
+    prediction.settledLedgerApplied = true;
+    return;
+  }
+
+  if (prediction.side !== winningSide) {
+    prediction.settledLedgerApplied = true;
+    return;
+  }
+
+  const outcome = calculatePredictionOutcome(prediction, round);
+  applySparkChange(outcome.returnedStake + outcome.sparkProfit, "win", `Winning guess payout at ${formatMultiplier(outcome.finalMultiplier)}`, round.id);
+  prediction.settledLedgerApplied = true;
+
+  if (!getUser().missions.firstWinRewarded) {
+    getUser().missions.firstWinRewarded = true;
+    applySparkChange(GAME_RULES.missionRewards.firstWinningGuess, "mission", "Mission: first winning guess of the day", round.id);
+  }
 }
 
 function calculateScoreWithSide(prediction, round, winningSide) {
@@ -1379,20 +1999,17 @@ function createRewards(round, winners) {
     return [];
   }
 
-  const baseCents = Math.floor(round.rewardPoolCents / winners.length);
-  let remainder = round.rewardPoolCents - baseCents * winners.length;
-
   return winners.map((entry, index) => {
-    const extraCent = remainder > 0 ? 1 : 0;
-    remainder -= extraCent;
+    const outcome = calculatePredictionOutcome(entry.prediction, round);
     return {
       id: `RW-${round.id}-${entry.prediction.wallet.slice(-6)}-${Date.now()}-${index}`,
       roundId: round.id,
       wallet: entry.prediction.wallet,
       rank: index + 1,
-      rewardAmountCents: baseCents + extraCent,
-      score: entry.score,
-      status: "pending",
+      sparkProfit: outcome.sparkProfit,
+      returnedStake: outcome.returnedStake,
+      finalMultiplier: outcome.finalMultiplier,
+      status: "settled",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -1421,6 +2038,117 @@ function markActiveRewards(status) {
   showToast(changed ? `${changed} reward(s) marked ${status}.` : "No rewards for the active round.");
 }
 
+function awardFiveDayMissionIfEarned() {
+  const user = getUser();
+  const userRoundDates = new Set(
+    pulseState.predictions
+      .filter((prediction) => prediction.wallet === DEMO_WALLET)
+      .map((prediction) => pulseState.rounds.find((round) => round.id === prediction.roundId)?.roundDate)
+      .filter(Boolean)
+  );
+  const weekKeys = new Set(Array.from(userRoundDates).map(weekKeyForDateKey));
+
+  for (const weekKey of weekKeys) {
+    if (user.missions.fiveDayWeeks.includes(weekKey)) {
+      continue;
+    }
+
+    const days = Array.from({ length: 5 }, (_, index) => addDateKey(weekKey, index));
+    const completed = days.every((dateKey) => userRoundDates.has(dateKey));
+    if (completed) {
+      user.missions.fiveDayWeeks.push(weekKey);
+      applySparkChange(GAME_RULES.missionRewards.fiveDayWeek, "mission", "Mission: 5 consecutive trading-day guesses", null);
+    }
+  }
+}
+
+function stakeStt() {
+  if (!walletConnected) {
+    showToast("Connect the wallet first.");
+    return;
+  }
+
+  if (isUserStaked()) {
+    showToast("1 STT is already staked.");
+    return;
+  }
+
+  const now = new Date();
+  const unlockAt = new Date(now.getTime() + GAME_RULES.stakeLockDays * 86400000);
+  const user = getUser();
+  user.stake = {
+    active: true,
+    amountStt: GAME_RULES.sttStakeAmount,
+    stakedAt: now.toISOString(),
+    unlockAt: unlockAt.toISOString()
+  };
+
+  if (!user.missions.stakeRewarded) {
+    user.missions.stakeRewarded = true;
+    applySparkChange(GAME_RULES.missionRewards.stakeStt, "mission", "Mission: stake 1 STT", null);
+  }
+
+  saveState();
+  render();
+  showToast("1 STT staked. Trading Mode unlocked.");
+}
+
+function unstakeStt() {
+  const user = getUser();
+
+  if (!isUserStaked()) {
+    showToast("No active STT stake.");
+    return;
+  }
+
+  if (new Date(user.stake.unlockAt).getTime() > Date.now()) {
+    showToast("Stake is locked for one week.");
+    return;
+  }
+
+  user.stake = {
+    ...user.stake,
+    active: false,
+    unstakedAt: new Date().toISOString()
+  };
+  saveState();
+  render();
+  showToast("STT unstaked. Paper Mode active.");
+}
+
+function redeemSparks() {
+  const user = getUser();
+
+  if (!isUserStaked()) {
+    showToast("Stake 1 STT to unlock redemption.");
+    return;
+  }
+
+  if (user.sparkBalance < GAME_RULES.sparksPerUsdt) {
+    showToast(`You need ${GAME_RULES.sparksPerUsdt.toLocaleString("en-US")} Sparks to redeem 1 USDT.`);
+    return;
+  }
+
+  applySparkChange(-GAME_RULES.sparksPerUsdt, "redeem", "Redeemed 1 USDT demo record", null);
+  user.redemptions.push({
+    id: `RD-${Date.now()}`,
+    amountSparks: GAME_RULES.sparksPerUsdt,
+    amountUsdt: 1,
+    status: "demo-pending",
+    createdAt: new Date().toISOString()
+  });
+  saveState();
+  render();
+  showToast("Redemption record created: 1 USDT.");
+}
+
+function estimatedAnnualizedYieldPercent() {
+  const dailyBonusSparks = GAME_RULES.maxDailyBetSparks * 0.25;
+  const dailyBonusUsdt = dailyBonusSparks / GAME_RULES.sparksPerUsdt;
+  const annualValueUsdt = dailyBonusUsdt * GAME_RULES.tradingDaysPerYear;
+  return annualValueUsdt / GAME_RULES.sttReferenceUsdt * 100;
+}
+
 function renderCountdown(round) {
   const status = effectiveStatus(round);
   const target = status === "upcoming" ? new Date(round.startTime) : new Date(round.predictionCutoffTime);
@@ -1441,22 +2169,57 @@ function renderCountdown(round) {
     return;
   }
 
-  const hours = Math.floor(remaining / 3600000);
-  const minutes = Math.floor((remaining % 3600000) / 60000);
-  els.countdownValue.textContent = `${hours}h ${minutes}m`;
+  els.countdownValue.textContent = formatDuration(remaining);
   renderRoundDetails(round);
+}
+
+function handleProfileAction(event) {
+  const action = event.target.closest("[data-profile-action]")?.dataset.profileAction;
+  if (!action) {
+    return;
+  }
+
+  if (action === "stake") {
+    stakeStt();
+  } else if (action === "unstake") {
+    unstakeStt();
+  } else if (action === "redeem") {
+    redeemSparks();
+  }
 }
 
 function wireEvents() {
   els.walletButton.addEventListener("click", () => {
     walletConnected = !walletConnected;
     localStorage.setItem(PULSE_WALLET_KEY, String(walletConnected));
+    if (walletConnected) {
+      ensureDailySparkGrant(true);
+    }
     render();
-    showToast(walletConnected ? "Demo wallet connected." : "Demo wallet disconnected.");
+    showToast(walletConnected ? "Wallet connected. Paper Mode active." : "Wallet disconnected.");
   });
 
   els.predictUpButton.addEventListener("click", () => submitPrediction("UP"));
   els.predictDownButton.addEventListener("click", () => submitPrediction("DOWN"));
+
+  if (els.sparkBetAmount) {
+    els.sparkBetAmount.addEventListener("input", () => {
+      const amount = betAmountFromInput();
+      renderBetAmountUi(amount);
+      renderRoundDetails(getActiveRound());
+    });
+  }
+
+  document.querySelectorAll("[data-bet-adjust]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextAmount = betAmountFromInput() + Number(button.dataset.betAdjust || 0);
+      setBetAmount(nextAmount);
+    });
+  });
+
+  document.querySelectorAll("[data-bet-amount]").forEach((button) => {
+    button.addEventListener("click", () => setBetAmount(Number(button.dataset.betAmount)));
+  });
 
   els.adminForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1468,8 +2231,16 @@ function wireEvents() {
   els.markRewardsPaidButton.addEventListener("click", () => markActiveRewards("paid"));
   els.leaderboardWeekSelect.addEventListener("change", () => {
     selectedLeaderboardWeekKey = els.leaderboardWeekSelect.value;
-    renderLeaderboard(getActiveRound());
+    renderLeaderboard();
   });
+  els.cancelGuessButton.addEventListener("click", closeGuessConfirmation);
+  els.confirmGuessButton.addEventListener("click", confirmPendingGuess);
+  els.guessConfirmModal.addEventListener("click", (event) => {
+    if (event.target === els.guessConfirmModal) {
+      closeGuessConfirmation();
+    }
+  });
+  els.profilePanel.addEventListener("click", handleProfileAction);
   els.monthlySilverChart.addEventListener("pointermove", updateMonthlyChartHover);
   els.monthlySilverChart.addEventListener("pointerleave", hideMonthlyChartHover);
   els.monthlySilverChart.addEventListener("mousemove", updateMonthlyChartHover);
@@ -1485,6 +2256,11 @@ function wireEvents() {
   });
 
   window.addEventListener("focus", () => renderCountdown(getActiveRound()));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && els.guessConfirmModal.classList.contains("is-visible")) {
+      closeGuessConfirmation();
+    }
+  });
   window.addEventListener("scroll", syncPulseHeaderSpot, { passive: true });
   window.addEventListener("resize", syncPulseHeaderSpot);
 }

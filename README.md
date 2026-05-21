@@ -3,7 +3,7 @@
 Static MVP prototype for SilverTimes product demos:
 
 - **Dual Investment:** STT / USDT target-price yield flow.
-- **Silver Pulse:** daily silver UP/DOWN prediction challenge with fake wallet, local leaderboard, and manual LBMA settlement.
+- **Silver Pulse:** daily silver UP/DOWN prediction challenge with fake wallet, Sparks ledger, staking mode, local leaderboard, and manual LBMA settlement.
 - **Range Prediction:** weekly, 1M, and 3M silver in-range prediction flow using USDT or STT participation.
 
 ## Run
@@ -45,13 +45,19 @@ This prototype does not perform real token approvals, wallet signatures, smart c
 
 ## Silver Pulse MVP Behavior
 
-- Fake Connect Wallet toggles a local demo wallet state.
-- Daily round data is seeded in `localStorage`.
-- Price source is labeled as LBMA silver price, with manual MVP input through the admin console.
-- Users can submit one UP or DOWN prediction per round.
-- Score is calculated as `base points * time bonus * win-streak multiplier`.
-- Admin can set round prices, trigger settlement, and mark USDT reward records as pending, approved, or paid.
-- Rewards are demo records only; no on-chain payment or real wallet signature is performed.
+- Fake Connect Wallet toggles a local demo wallet state and starts paper trading mode.
+- Daily round data, Spark balances, stake state, guess history, missions, and redemption records are seeded/stored in `localStorage`.
+- Each wallet starts with `10 Sparks`; the system adds `10 Sparks` per trading day while balance is `100 Sparks` or below.
+- Users can submit one UP or DOWN guess per HKT trading day with a minimum of `10 Sparks` and daily maximum of `100 Sparks`.
+- Users can edit the latest guess once during the valid HKT trading window. Full edit history is retained and only the latest valid guess settles.
+- Guess submission shows a confirmation screen before Sparks are committed.
+- Leaderboard ranks wallets by all-time Sparks earned.
+- HKT trading day opens at `12:00 PM HKT` and closes at `10:00 AM HKT` the next calendar day, labeled by opening date.
+- Wrong guesses lose the Spark amount used. Correct guesses return the Spark amount plus profit from the higher of the staking multiplier or winning-streak multiplier, capped at `1.5x`.
+- Stake `1 STT` to enter real trading mode. The demo stake is locked for one week, then can be unstaked anytime.
+- Real trading unlocks the `1.5x` win multiplier and redemption at `2,000 Sparks = 1 USDT`. Sparks are non-transferable.
+- Missions award one-time Spark rewards: `100 Sparks` for five consecutive trading-day guesses in the same week, `100 Sparks` for the first winning daily guess, and `1,000 Sparks` for staking `1 STT`.
+- Admin can set round prices, adjust the demo Spark balance, and trigger settlement. Spark rewards and redemptions are demo records only; no on-chain payment or real wallet signature is performed.
 
 ## Range Prediction MVP Behavior
 

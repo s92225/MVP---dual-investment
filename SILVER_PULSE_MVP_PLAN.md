@@ -1,33 +1,32 @@
 # Silver Pulse MVP Plan
 
-Date: 2026-05-12
+Date: 2026-05-21
 
-Silver Pulse now lives inside the existing **SilverTimes Dual Investment MVP** static project and Vercel deployment. The MVP is implemented as a separate page:
+Silver Pulse lives inside the existing **SilverTimes Dual Investment MVP** static project and Vercel deployment. The MVP is implemented as a separate page:
 
 `silver-pulse.html`
 
 ## Product Definition
 
-Silver Pulse is a free-to-play daily silver prediction game. Users connect a fake demo wallet and predict whether silver will close **UP** or **DOWN** versus the day's opening LBMA silver reference price.
+Silver Pulse is a daily silver prediction challenge. Users connect a demo wallet, receive Sparks, and guess whether silver will close **UP** or **DOWN** versus the trading day's opening reference price.
 
-Correct users are ranked by score. The top ranked winners share a fixed daily USDT reward pool.
+Everyone can play in paper trading mode. Users can stake `1 STT` to enter real trading mode, unlock the `1.5x` win multiplier, and redeem Sparks at `2,000 Sparks = 1 USDT`.
 
 ## Confirmed MVP Decisions
 
 - Launch scope: global demo.
 - Authentication: fake connect wallet only, matching the Dual Investment MVP behavior.
-- Price source: LBMA silver price for settlement, manually entered for MVP. The live display labels the current value as silver spot price.
-- Round timezone: trading round uses the London LBMA schedule.
-- Round cadence: silver trading days only, Monday through Friday for MVP.
-- Reward unit: USDT records.
-- Reward pool: default 20 USDT.
-- Winner display: shortened wallet address.
+- Price source: LBMA silver price for settlement, manually entered for MVP.
+- Timezone: Hong Kong time.
+- Trading day: `12:00 PM HKT` to `10:00 AM HKT` the next calendar day, labeled by opening date.
+- Round cadence: Monday through Friday opening dates.
+- Starting balance: `10 Sparks`.
+- Daily reward: `10 Sparks` while balance is `100 Sparks` or below.
+- Minimum guess: `10 Sparks`.
+- Daily max guess amount: `100 Sparks`.
+- Redemption rate: `2,000 Sparks = 1 USDT`.
+- Sparks are non-transferable.
 - Deployment: existing Dual Investment MVP Vercel project.
-
-## MVP Route
-
-- `/silver-pulse.html`: Silver Pulse game page.
-- `/index.html`: Dual Investment MVP remains unchanged except for links into Silver Pulse.
 
 ## Gameplay Rules
 
@@ -36,20 +35,21 @@ Each trading day has one active round.
 Users can:
 
 - Connect a fake demo wallet.
-- View opening reference, current silver spot price, and closing LBMA price after settlement.
-- Submit exactly one UP or DOWN prediction per round.
+- View opening reference, current silver spot price, and closing price after settlement.
+- Submit one UP or DOWN guess per trading day.
+- Edit the latest guess once during the valid trading window.
 - View community sentiment before settlement.
-- View final leaderboard after settlement.
-- View local wallet prediction history and rewards.
+- View the all-time Spark leaderboard after settlement.
+- View profile balance, staking status, mission progress, and local guess history.
 
 Admin can:
 
 - Set opening reference, silver spot price, and closing price manually.
-- Set reward pool and max winners.
+- Adjust the demo wallet Spark balance.
 - Set round status.
 - Override result as UP, DOWN, or FLAT.
 - Trigger settlement.
-- Mark rewards pending, approved, or paid.
+- Mark Spark payout records approved or paid.
 
 ## Settlement Logic
 
@@ -63,79 +63,65 @@ closing_price == opening_price = FLAT
 
 If admin sets a result override, the override wins.
 
-If result is FLAT, no rewards are created.
-
-Entries close two hours before LBMA publication:
-
-- Prediction cutoff: 10:00 London time.
-- LBMA silver benchmark: 12:00 London time.
-
-## Score Formula
-
-Only correct predictions receive score.
+Wrong guesses lose the Spark amount used. Correct guesses return the Spark amount plus Spark profit.
 
 ```text
-score = base_points * time_bonus * win_streak_multiplier
+final_win_multiplier = max(staking_multiplier, streak_multiplier)
 ```
 
-Current MVP formula:
+The final win multiplier is capped at `1.5x` for MVP.
 
-- Correct side base points: `100`
-- Wrong side base points: `0`
-- Time bonus depends on how long before the 10:00 London cutoff the prediction is submitted.
-- Win streak multiplier uses the current correct streak, including the current correct prediction.
+Users see a confirmation screen before a new guess or one allowed edit commits Sparks.
 
-Time bonus:
+## Staking And Yield
 
-| Time to cutoff when joined | Bonus |
+Real trading mode:
+
+- User stakes `1 STT`.
+- Stake is locked for one week.
+- After one week, the user can unstake anytime.
+- Staking unlocks the `1.5x` win multiplier and Spark redemption.
+
+Estimated yield wording:
+
+> Stake 1 STT to unlock up to 4% estimated annualized Spark earning yield.
+
+Calculation:
+
+```text
+Max daily play = 100 Sparks
+Expected staking edge at 50% win rate = 25%
+Expected bonus = 25 Sparks per trading day
+25 Sparks = 0.0125 USDT
+260 trading days/year = 3.25 USDT expected annual value
+1 STT = 75 USDT
+3.25 / 75 = 4.33%, rounded to 4%
+```
+
+This is not guaranteed yield. Actual results depend on win rate, daily play, STT price, and the Spark redemption rate.
+
+## Winning Streak
+
+Winning streak bonus is based on previous consecutive winning trading days:
+
+| Previous winning days | Multiplier |
 |---|---:|
-| 8h+ | 1.5x |
-| 6h+ | 1.3x |
-| 4h+ | 1.2x |
-| 2h+ | 1.1x |
-| Less than 2h | 1.0x |
+| 0 | 1.0x |
+| 1 | 1.1x |
+| 2 | 1.2x |
+| 3 | 1.3x |
+| 4 | 1.4x |
+| 5+ | 1.5x |
 
-Win streak multiplier:
+The staking multiplier and streak multiplier do not stack. The higher multiplier applies.
 
-| Win streak | Multiplier |
-|---|---:|
-| 1 correct | 1.0x |
-| 2 correct | 1.1x |
-| 3 correct | 1.2x |
-| 5 correct | 1.5x |
-| 7 correct | 1.8x |
-| 10+ correct | 2.0x |
+## Missions
 
-For streak counts between listed thresholds, use the highest threshold already reached. For example, 4 correct uses 1.2x and 6 correct uses 1.5x.
+Mission rewards are one-time Spark rewards:
 
-Example:
-
-```text
-8h+ before cutoff + current 3-win streak = 100 * 1.5 * 1.2 = 180 points
-```
-
-Tie-breakers:
-
-1. Higher score first.
-2. Earlier prediction timestamp.
-3. Lower wallet address alphabetically.
-
-## Reward Formula
-
-Rewards are stored in integer cents to avoid decimal rounding issues.
-
-```text
-winners = top correct predictions up to max_winners
-reward_per_winner = reward_pool / winners.length
-```
-
-If cents do not divide evenly, leftover cents are assigned from rank 1 downward.
-
-Examples:
-
-- 20 or more correct users and max winners is 20: top 20 receive 1.00 USDT each.
-- 5 correct users: 5 winners receive 4.00 USDT each.
-- 0 correct users or FLAT: no payout.
+- Submit guesses for 5 consecutive trading days in the same Monday-Friday week: `100 Sparks`.
+- Score the first winning daily guess: `100 Sparks`.
+- Stake `1 STT`: `1,000 Sparks`.
 
 ## Storage Model
 
@@ -143,47 +129,26 @@ This is a static MVP. It uses browser `localStorage` instead of a backend databa
 
 Local storage keys:
 
-- `silvertimes-silver-pulse-state-v4`
+- `silvertimes-silver-pulse-state-v5`
 - `silvertimes-silver-pulse-wallet-connected`
 
-The seeded state includes one active round, two settled historical rounds, sample predictions, and one paid historical reward for the demo wallet.
+The seeded state includes one active round, settled historical rounds, sample predictions, Spark payout records, and a demo wallet ledger.
 
 ## Compliance Guardrails
 
-The MVP should remain a promotional prediction challenge:
+The MVP should remain a prediction challenge, not a casino-style product:
 
-- No deposits.
-- No user-funded prize pool.
-- No odds.
-- No tradable positions.
-- No leverage.
-- No language promising profit, investment return, or guaranteed wins.
-
-Use wording such as:
-
-- prediction
-- forecast
-- daily challenge
-- reward pool
-- free-to-play
-
-Avoid wording such as:
-
-- bet
-- gamble
-- wager
-- casino
-- odds
-- guaranteed win
-- profit
-- investment return
+- Sparks are non-transferable.
+- Demo records do not perform token approvals, wallet signatures, smart contract calls, KYC, or oracle settlement.
+- Paper users can complete missions and qualify for airdrops.
+- Only staked users can redeem Sparks in the MVP demo.
+- The 4% figure must be shown as an estimate, not a guarantee.
 
 ## Production Notes
 
 Before production, revisit these choices:
 
-- Global launch plus user-local daily rounds can fragment the leaderboard by timezone. A single UTC or LBMA publication-day round may be cleaner.
-- Manual LBMA input is acceptable for MVP, but production needs a reliable source, timestamp, precision rule, and audit log.
-- USDT rewards may trigger jurisdiction-specific rules even when free-to-play. Legal review is required before a public launch.
-- Fake wallet auth should be replaced with real wallet signature or another identity layer.
-- Anti-bot controls will be needed if rewards become claimable.
+- Real wallet auth should replace fake wallet state.
+- STT staking and Spark redemption need contract, custody, compliance, and abuse-control review.
+- A reliable price source, timestamp, precision rule, and audit log are needed for settlement.
+- Anti-bot controls will be needed if Sparks become redeemable or airdrop-relevant.

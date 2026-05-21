@@ -149,6 +149,23 @@ a {
   padding: 0 16px;
 }
 
+.primary-button.compact {
+  min-height: 36px;
+  padding: 0 16px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .hero-band {
   position: relative;
   width: min(var(--page-max-width), calc(100% - 40px));
@@ -1222,6 +1239,66 @@ select:focus {
   box-shadow: rgba(0, 0, 0, 0.5) 0 30px 60px -24px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: none;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(12px);
+}
+
+.modal-backdrop.is-visible {
+  display: grid;
+}
+
+.guess-confirm-card {
+  width: min(430px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(103, 199, 255, 0.1), transparent 48%),
+    var(--surface-panel);
+  box-shadow: rgba(0, 0, 0, 0.5) 0 30px 60px -24px;
+}
+
+.guess-confirm-card h3,
+.guess-confirm-card p {
+  margin: 0;
+}
+
+.guess-confirm-card p {
+  color: var(--color-ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.confirm-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-light-steel);
+}
+
+.confirm-summary strong {
+  color: var(--color-ink);
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .confirm-summary {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1246,6 +1323,42 @@ select:focus {
 
 .confirm-summary strong {
   color: var(--color-ink);
+}
+
+.guess-confirm-card .pulse-confirm-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.guess-confirm-card .pulse-confirm-summary span {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-light-steel);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.guess-confirm-card .pulse-confirm-summary strong {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: var(--color-ink);
+  font-size: 17px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.guess-confirm-card .pulse-confirm-summary small {
+  grid-column: 1;
+  color: var(--color-muted-stone);
 }
 
 .range-confirm-summary {
@@ -1522,6 +1635,90 @@ select:focus {
   line-height: 1.12;
 }
 
+.spark-bet-panel {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(240px, 1.1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid rgba(103, 199, 255, 0.44);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(103, 199, 255, 0.13), transparent 46%),
+    rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(103, 199, 255, 0.1);
+}
+
+.spark-bet-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.spark-bet-copy strong {
+  color: var(--color-ink);
+  font-family: var(--font-signifier);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.spark-bet-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.spark-stepper {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  gap: 8px;
+  align-items: center;
+}
+
+.spark-bet-panel input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.spark-bet-panel .summary-text {
+  margin: 0;
+  max-width: none;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.bet-chip-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bet-chip-row button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--color-light-steel);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.bet-chip-row button:hover,
+.bet-chip-row button:focus-visible,
+.bet-chip-row button.is-active {
+  border-color: rgba(103, 199, 255, 0.58);
+  background: rgba(103, 199, 255, 0.16);
+  color: var(--color-ink);
+}
+
 .pulse-price-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1606,7 +1803,6 @@ select:focus {
 }
 
 .pulse-status-line {
-  display: none;
   background: var(--surface-elevated);
 }
 
@@ -2019,9 +2215,21 @@ select:focus {
   overflow-wrap: anywhere;
 }
 
+.score-bonus-row strong {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: max-content;
+}
+
 .score-row small {
   color: var(--color-light-steel);
   font-size: 12px;
+}
+
+.score-bonus-row small {
+  font-weight: 700;
 }
 
 .terms-toggle {
@@ -2049,6 +2257,25 @@ select:focus {
   display: grid;
   gap: 10px;
   padding: 0 14px 14px;
+}
+
+.pulse-rules-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.pulse-rules-toggle summary {
+  font-weight: 700;
+}
+
+.pulse-rules-toggle .terms-content {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.pulse-rules-toggle li {
+  margin-bottom: 6px;
+  line-height: 1.42;
 }
 
 .pulse-table-shell {
@@ -2090,6 +2317,172 @@ select:focus {
   background:
     linear-gradient(90deg, rgba(240, 164, 122, 0.08), transparent 42%),
     rgba(255, 255, 255, 0.015);
+}
+
+.profile-economy,
+.mission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 760px;
+  padding: 16px;
+}
+
+.mission-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 0.95fr);
+  padding-top: 4px;
+}
+
+.profile-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 156px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-card strong {
+  color: var(--color-ink);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.profile-card small {
+  margin: 0;
+  color: var(--color-muted-stone);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.mission-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 176px;
+  padding: 16px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mission-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--mission-accent, var(--color-light-steel));
+}
+
+.mission-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mission-head span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mission-head small {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-light-steel);
+  font-size: 12px;
+}
+
+.mission-card strong {
+  color: var(--color-ink);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.12;
+}
+
+.mission-card p {
+  margin: 0;
+  color: var(--color-muted-stone);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mission-reward {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: auto;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mission-reward span {
+  color: var(--color-light-steel);
+  font-size: 12px;
+}
+
+.mission-reward strong {
+  font-size: 15px;
+}
+
+.mission-streak {
+  --mission-accent: #67c7ff;
+  background:
+    linear-gradient(135deg, rgba(103, 199, 255, 0.13), transparent 54%),
+    var(--surface-elevated);
+}
+
+.mission-win {
+  --mission-accent: #00c176;
+  background:
+    linear-gradient(135deg, rgba(0, 193, 118, 0.12), transparent 54%),
+    var(--surface-elevated);
+}
+
+.mission-stake {
+  --mission-accent: #f0a47a;
+  background:
+    linear-gradient(135deg, rgba(240, 164, 122, 0.14), transparent 54%),
+    var(--surface-elevated);
+}
+
+.mission-card.is-complete {
+  background:
+    linear-gradient(135deg, rgba(0, 193, 118, 0.12), transparent 48%),
+    var(--surface-elevated);
+  border-color: rgba(0, 193, 118, 0.22);
+}
+
+.mission-card.is-complete .mission-head small {
+  background: rgba(0, 193, 118, 0.16);
+  color: #7df0bf;
+}
+
+.profile-history-table {
+  border-top: 1px solid var(--color-hint-of-grey);
 }
 
 .leaderboard-workspace {
@@ -2151,6 +2544,17 @@ select:focus {
   overflow: auto;
 }
 
+.history-shell {
+  max-height: 328px;
+  overflow: auto;
+}
+
+.history-shell .pulse-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 .leaderboard-shell .empty-state {
   padding: 14px 16px;
   font-size: 14px;
@@ -2171,6 +2575,10 @@ select:focus {
 
 .leaderboard-shell .weekly-winners-table .pulse-table-row {
   grid-template-columns: 100px 52px 0.95fr 66px 68px 98px 74px;
+}
+
+.leaderboard-shell .all-time-leaderboard-table .pulse-table-row {
+  grid-template-columns: 58px minmax(130px, 1fr) 118px 58px 112px 102px 88px;
 }
 
 .leaderboard-shell .pulse-table-head {
@@ -2568,10 +2976,14 @@ select:focus {
   text-align: left;
 }
 
+.range-confirm-summary .share-tooltip {
+  display: none;
+}
+
 .share-estimate-value:hover .share-tooltip,
 .share-estimate-value:focus-within .share-tooltip,
-.reward-estimate-value:hover .share-tooltip,
-.reward-estimate-value:focus-within .share-tooltip {
+.reward-estimate-value .share-tooltip-trigger:hover ~ .share-tooltip,
+.reward-estimate-value .share-tooltip-trigger:focus-visible ~ .share-tooltip {
   display: block;
 }
 
@@ -2678,6 +3090,8 @@ select:focus {
   .pulse-round-grid,
   .pulse-price-grid,
   .pulse-admin-form,
+  .profile-economy,
+  .mission-grid,
   .range-builder-grid,
   .range-stats-grid,
   .range-admin-form {
@@ -2696,6 +3110,10 @@ select:focus {
   }
 
   .prediction-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .spark-bet-panel {
     grid-template-columns: 1fr;
   }
 

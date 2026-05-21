@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Silver Pulse Daily Prediction</title>
-    <link rel="stylesheet" href="styles.css?v=20260520-unified-header">
+    <link rel="stylesheet" href="styles.css?v=20260521-rate-bonus">
   </head>
   <body class="silver-pulse-page">
     <header class="topbar" aria-label="Primary">
@@ -32,7 +32,7 @@
           </div>
           <h1 id="pulseTitle">Will silver close UP or DOWN today?</h1>
           <p class="pulse-hero-text">
-            Predict against the day&apos;s opening price. Correct players compete for the USDT reward pool.
+            Submit a daily silver guess with Sparks. Stake 1 STT to unlock the 1.5x Trading Mode win multiplier and an estimated 4% annualized Spark earning yield.
           </p>
           <div class="hero-actions">
             <a class="primary-button" href="#round">Submit Prediction</a>
@@ -41,14 +41,14 @@
         </div>
         <div class="hero-visual" aria-hidden="true">
           <div class="orbital-card large">
-            <span>Reward Pool</span>
-            <strong id="heroRewardPool">20 USDT</strong>
-            <small>SilverTimes funded</small>
+            <span>Spark Balance</span>
+            <strong id="heroRewardPool">10 Sparks</strong>
+            <small>profile ledger</small>
           </div>
           <div class="orbital-card">
-            <span>Top Winners</span>
-            <strong id="heroMaxWinners">20</strong>
-            <small>Ranked by score</small>
+            <span>Stake Yield</span>
+            <strong id="heroMaxWinners">4%</strong>
+            <small>estimated annualized</small>
           </div>
         </div>
       </section>
@@ -89,6 +89,30 @@
 
               <div id="monthlySilverChart" class="monthly-chart" aria-label="Monthly silver price chart"></div>
 
+              <div class="spark-bet-panel" aria-labelledby="sparkBetTitle">
+                <div class="spark-bet-copy">
+                  <span class="metric-label" id="sparkBetTitle">Bet amount</span>
+                  <strong><span id="betAmountDisplay">10</span> Sparks</strong>
+                  <p id="betLimitText" class="summary-text">10 Sparks minimum, 100 Sparks daily max.</p>
+                </div>
+                <div class="spark-bet-controls">
+                  <div class="spark-stepper">
+                    <button class="ghost-button compact" type="button" data-bet-adjust="-10" aria-label="Decrease bet by 10 Sparks">-</button>
+                    <label for="sparkBetAmount">
+                      <span class="sr-only">Spark amount</span>
+                      <input id="sparkBetAmount" type="number" inputmode="numeric" min="10" max="100" step="10" value="10">
+                    </label>
+                    <button class="ghost-button compact" type="button" data-bet-adjust="10" aria-label="Increase bet by 10 Sparks">+</button>
+                  </div>
+                  <div class="bet-chip-row" aria-label="Quick Spark amounts">
+                    <button type="button" data-bet-amount="10">10</button>
+                    <button type="button" data-bet-amount="25">25</button>
+                    <button type="button" data-bet-amount="50">50</button>
+                    <button type="button" data-bet-amount="100">100</button>
+                  </div>
+                </div>
+              </div>
+
               <div class="prediction-actions" role="group" aria-label="Prediction choice">
                 <button id="predictUpButton" class="pulse-choice pulse-choice-up" type="button" data-side="UP">
                   <span>Predict above target</span>
@@ -102,6 +126,19 @@
               </div>
 
               <div id="userPredictionStatus" class="scenario-result pulse-status-line" aria-live="polite"></div>
+
+              <details class="terms-toggle pulse-rules-toggle">
+                <summary>Rules and T&amp;C</summary>
+                <div class="terms-content">
+                  <ul>
+                    <li>Play with Sparks in Paper Mode. Stake 1 STT for Trading Mode, 1.5x wins, and redemption.</li>
+                    <li>Bet 10-100 Sparks per trading day. You can edit the latest guess once before 10:00 AM HKT.</li>
+                    <li>Correct guesses return the bet plus profit. Wrong guesses lose the bet. The higher active bonus is used and final multiplier is capped at 1.5x.</li>
+                    <li>Get 10 free Sparks daily while balance is 100 or below. Staked users can redeem 2,000 Sparks = 1 USDT.</li>
+                    <li>The 4% yield is an estimate using 50% win rate, max daily play, 1 STT = 75 USDT, 2,000 Sparks = 1 USDT, and 260 trading days.</li>
+                  </ul>
+                </div>
+              </details>
 
               <div class="pulse-price-grid">
                 <div class="stat">
@@ -142,44 +179,25 @@
           <aside class="detail-panel" aria-labelledby="roundDetailTitle">
             <div class="detail-stack">
               <div class="detail-header">
-                <h3 id="roundDetailTitle">Potential Points</h3>
+                <h3 id="roundDetailTitle">Potential Spark Profit</h3>
               </div>
               <div class="scenario-chart score-preview-card">
                 <div class="chart-header">
                   <span>If your side is correct</span>
-                  <strong id="potentialScoreValue">100 pts</strong>
+                  <strong id="potentialScoreValue">10 Sparks</strong>
                 </div>
                 <div class="score-stack">
                   <div class="score-row">
-                    <span>Base point</span>
+                    <span>Bet amount</span>
                     <strong id="basePointValue">100</strong>
                   </div>
-                  <div class="score-row">
-                    <span>Time bonus</span>
-                    <strong id="timeBonusValue">1.0x</strong>
-                  </div>
-                  <div class="score-row">
-                    <span>Streak bonus</span>
-                    <strong><span id="streakBonusValue">1.0x</span> <small id="streakCountValue">1 win</small></strong>
+                  <div class="score-row score-bonus-row">
+                    <span id="bonusLabelValue">Streak bonus</span>
+                    <strong><span id="bonusMultiplierValue">1.0x</span> <small id="bonusMetaValue">0 prior wins</small></strong>
                   </div>
                 </div>
               </div>
               <div id="roundDetailStats" class="stat-grid"></div>
-              <details class="terms-toggle">
-                <summary>Terms</summary>
-                <div class="terms-content">
-                  <ul>
-                    <li>Free-to-play promotional challenge funded by SilverTimes.</li>
-                    <li>No purchase, deposit, trading position, odds, leverage, or user-funded prize pool.</li>
-                    <li>One UP or DOWN prediction per wallet per trading day.</li>
-                    <li>Predictions close at 10:00 London time and cannot be changed after submission.</li>
-                    <li>Result resolves against the LBMA Silver Price benchmark published at 12:00 London time.</li>
-                    <li>Correct users are ranked by score. If scores are tied, the earlier submission ranks higher.</li>
-                    <li>Top ranked winners share the displayed USDT reward pool as MVP reward records.</li>
-                    <li>SilverTimes may cancel, correct, or manually resolve rounds if data is unavailable, erroneous, or abuse is detected.</li>
-                  </ul>
-                </div>
-              </details>
             </div>
           </aside>
         </div>
@@ -208,16 +226,16 @@
             <p class="eyebrow">Trading Days Only</p>
             <h2 id="historyTitle">Round History</h2>
           </div>
-          <p class="summary-text">Rounds are shown in the user&apos;s local timezone for this MVP.</p>
+          <p class="summary-text">Trading days use Hong Kong time for this MVP.</p>
         </div>
-        <div id="roundHistoryPanel" class="positions-list pulse-table-shell" aria-live="polite"></div>
+        <div id="roundHistoryPanel" class="positions-list pulse-table-shell history-shell" aria-live="polite"></div>
       </section>
 
       <section id="profile" class="workspace" aria-labelledby="profileTitle">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Demo Wallet Ledger</p>
-            <h2 id="profileTitle">My Predictions</h2>
+            <h2 id="profileTitle">My Profile</h2>
           </div>
           <button id="resetPulseButton" class="ghost-button compact" type="button">Reset Demo</button>
         </div>
@@ -247,11 +265,11 @@
             <input id="adminClosingPrice" type="text" inputmode="decimal">
           </div>
           <div class="field">
-            <label for="adminRewardPool">Reward Pool (USDT)</label>
+            <label for="adminRewardPool">Legacy Pool (USDT)</label>
             <input id="adminRewardPool" type="text" inputmode="decimal">
           </div>
           <div class="field">
-            <label for="adminMaxWinners">Max Winners</label>
+            <label for="adminMaxWinners">Legacy Winner Cap</label>
             <input id="adminMaxWinners" type="text" inputmode="numeric">
           </div>
           <div class="field">
@@ -263,6 +281,10 @@
               <option value="settled">settled</option>
               <option value="cancelled">cancelled</option>
             </select>
+          </div>
+          <div class="field">
+            <label for="adminSparkBalance">Demo Spark Balance</label>
+            <input id="adminSparkBalance" type="number" inputmode="numeric" min="0" step="1">
           </div>
           <div class="field">
             <label for="adminOverride">Result Override</label>
@@ -286,14 +308,31 @@
 
         <div class="admin-actions">
           <button id="settlePulseButton" class="primary-button" type="button">Trigger Settlement</button>
-          <button id="markRewardsApprovedButton" class="ghost-button" type="button">Mark Rewards Approved</button>
-          <button id="markRewardsPaidButton" class="ghost-button" type="button">Mark Rewards Paid</button>
+          <button id="markRewardsApprovedButton" class="ghost-button" type="button">Mark Spark Records Approved</button>
+          <button id="markRewardsPaidButton" class="ghost-button" type="button">Mark Spark Records Paid</button>
         </div>
       </section>
     </main>
 
+    <div id="guessConfirmModal" class="modal-backdrop" aria-hidden="true">
+      <div class="guess-confirm-card" role="dialog" aria-modal="true" aria-labelledby="guessConfirmTitle">
+        <span class="metric-label">Confirm guess</span>
+        <h3 id="guessConfirmTitle">Confirm your Spark bet</h3>
+        <p id="guessConfirmText">Are you sure you want to bet 10 Sparks on UP?</p>
+        <div class="confirm-summary pulse-confirm-summary">
+          <span class="confirm-summary-label">Paper / Trading Mode</span>
+          <strong id="guessConfirmMode">Paper Mode</strong>
+          <small id="guessConfirmModeMeta">Demo Sparks only</small>
+        </div>
+        <div class="confirm-actions">
+          <button id="cancelGuessButton" class="ghost-button" type="button">Cancel</button>
+          <button id="confirmGuessButton" class="primary-button" type="button">Confirm Bet</button>
+        </div>
+      </div>
+    </div>
+
     <div id="pulseToast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="silver-pulse.js?v=20260520-pulse-spot"></script>
+    <script src="silver-pulse.js?v=20260521-rate-bonus"></script>
   </body>
 </html>
