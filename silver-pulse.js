@@ -1854,14 +1854,7 @@ function activeStreakMultiplierForDays(activeDays) {
 function scorePreviewForWallet(round) {
   const prediction = currentWalletPrediction(round);
   const amountSparks = prediction ? prediction.amountSparks : betAmountFromInput();
-  const liveSnapshot = walletConnected
-    ? liveMultiplierSnapshotForWallet(DEMO_WALLET, round)
-    : {
-      tier: tierById("spark"),
-      activeStreakDays: 0,
-      streakMultiplier: 1,
-      finalMultiplier: 1
-    };
+  const liveSnapshot = liveMultiplierSnapshotForWallet(DEMO_WALLET, round);
   const tier = liveSnapshot.tier;
   const activeStreakDays = liveSnapshot.activeStreakDays;
   const streakMultiplier = liveSnapshot.streakMultiplier;
