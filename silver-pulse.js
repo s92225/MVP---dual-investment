@@ -1,4 +1,4 @@
-const PULSE_STORAGE_KEY = "silvertimes-silver-pulse-state-v5";
+const PULSE_STORAGE_KEY = "silvertimes-silver-forecast-state-v6";
 const PULSE_WALLET_KEY = "silvertimes-silver-pulse-wallet-connected";
 const DEMO_WALLET = "0x51cb9f3d6c0a42e89491dd2b7c12f4c0a9c0de55";
 const PRICE_SOURCE = "LBMA Silver Price (manual MVP input)";
@@ -9,24 +9,77 @@ const GAME_RULES = {
   startingSparks: 10,
   dailySparks: 10,
   freeSparkCap: 100,
-  sparksPerUsdt: 2000,
-  sttStakeAmount: 1,
-  sttReferenceUsdt: 75,
+  minStakeStt: 0.1,
+  stakeStepStt: 0.1,
   stakeLockDays: 7,
-  stakeWinMultiplier: 1.5,
-  tradingDaysPerYear: 260,
+  raffleSparksPerTicket: 100,
+  automaticRaffleTickets: 1,
+  maxTotalMultiplier: 2.4,
   missionRewards: {
-    fiveDayWeek: 100,
-    firstWinningGuess: 100,
-    stakeStt: 1000
+    connectWallet: 50,
+    setProfile: 50,
+    submitForecastDaily: 20,
+    correctForecastDaily: 30,
+    fiveForecastWeek: 100,
+    threeCorrectWeek: 150,
+    perfectWeek: 300,
+    holdSevenDays: 200,
+    stakeSevenDays: 400
   },
+  tiers: [
+    {
+      id: "apex",
+      label: "Apex",
+      multiplier: 2,
+      minStakeStt: 1,
+      minDays: 7,
+      description: "Stake 1 STT+ for 7 consecutive days",
+      payoutEligible: true
+    },
+    {
+      id: "nova",
+      label: "Nova",
+      multiplier: 1.5,
+      minHoldStt: 1,
+      minStakeStt: 0.5,
+      minDays: 7,
+      description: "Hold 1 STT or stake 0.5 STT for 7 consecutive days",
+      payoutEligible: true
+    },
+    {
+      id: "blaze",
+      label: "Blaze",
+      multiplier: 1.25,
+      minHoldStt: 0.5,
+      minStakeStt: 0.1,
+      minDays: 7,
+      description: "Hold 0.5 STT or stake 0.1 STT for 7 consecutive days",
+      payoutEligible: true
+    },
+    {
+      id: "flare",
+      label: "Flare",
+      multiplier: 1.1,
+      minHoldStt: 0.1,
+      minDays: 7,
+      description: "Hold 0.1 STT for 7 consecutive days",
+      payoutEligible: true
+    },
+    {
+      id: "spark",
+      label: "Spark",
+      multiplier: 1,
+      minDays: 0,
+      description: "Wallet connected",
+      payoutEligible: false
+    }
+  ],
   streakMultipliers: [
-    { priorWins: 5, multiplier: 1.5 },
-    { priorWins: 4, multiplier: 1.4 },
-    { priorWins: 3, multiplier: 1.3 },
-    { priorWins: 2, multiplier: 1.2 },
-    { priorWins: 1, multiplier: 1.1 },
-    { priorWins: 0, multiplier: 1 }
+    { activeDays: 5, multiplier: 1.2 },
+    { activeDays: 4, multiplier: 1.15 },
+    { activeDays: 3, multiplier: 1.1 },
+    { activeDays: 2, multiplier: 1.05 },
+    { activeDays: 0, multiplier: 1 }
   ]
 };
 
@@ -85,7 +138,6 @@ const els = {
   pulseHeaderMetric: document.querySelector("#pulseHeaderMetric"),
   pulseSpotInline: document.querySelector("#pulseSpotInline"),
   heroRewardPool: document.querySelector("#heroRewardPool"),
-  heroMaxWinners: document.querySelector("#heroMaxWinners"),
   roundStatusPill: document.querySelector("#roundStatusPill"),
   pulseQuestionText: document.querySelector("#pulseQuestionText"),
   monthlySilverChart: document.querySelector("#monthlySilverChart"),
@@ -116,10 +168,15 @@ const els = {
   adminOpeningPrice: document.querySelector("#adminOpeningPrice"),
   adminCurrentPrice: document.querySelector("#adminCurrentPrice"),
   adminClosingPrice: document.querySelector("#adminClosingPrice"),
-  adminRewardPool: document.querySelector("#adminRewardPool"),
-  adminMaxWinners: document.querySelector("#adminMaxWinners"),
   adminStatus: document.querySelector("#adminStatus"),
   adminSparkBalance: document.querySelector("#adminSparkBalance"),
+  adminUsername: document.querySelector("#adminUsername"),
+  adminHeldStt: document.querySelector("#adminHeldStt"),
+  adminHoldingDays: document.querySelector("#adminHoldingDays"),
+  adminStakedStt: document.querySelector("#adminStakedStt"),
+  adminStakingDays: document.querySelector("#adminStakingDays"),
+  adminTierOverride: document.querySelector("#adminTierOverride"),
+  adminActiveDaysOverride: document.querySelector("#adminActiveDaysOverride"),
   adminOverride: document.querySelector("#adminOverride"),
   adminCutoffTime: document.querySelector("#adminCutoffTime"),
   adminSettlementTime: document.querySelector("#adminSettlementTime"),
@@ -128,6 +185,8 @@ const els = {
   markRewardsPaidButton: document.querySelector("#markRewardsPaidButton"),
   guessConfirmModal: document.querySelector("#guessConfirmModal"),
   guessConfirmText: document.querySelector("#guessConfirmText"),
+  guessConfirmSide: document.querySelector("#guessConfirmSide"),
+  guessConfirmAmount: document.querySelector("#guessConfirmAmount"),
   guessConfirmMode: document.querySelector("#guessConfirmMode"),
   guessConfirmModeMeta: document.querySelector("#guessConfirmModeMeta"),
   cancelGuessButton: document.querySelector("#cancelGuessButton"),
@@ -185,7 +244,7 @@ function normalizeState(state) {
   const activeDateKey = activeTradingDateKey(new Date());
   const nextState = {
     ...state,
-    version: 5,
+    version: 6,
     user: normalizeUser(state.user, activeDateKey),
     rounds: [...state.rounds],
     predictions: state.predictions.map(normalizePrediction),
@@ -246,15 +305,17 @@ function normalizeState(state) {
 function normalizeUser(user, activeDateKey) {
   const normalized = {
     wallet: DEMO_WALLET,
+    username: typeof user?.username === "string" ? user.username : "",
+    profileSetAt: user?.profileSetAt || null,
     sparkBalance: Number.isFinite(Number(user?.sparkBalance)) ? Number(user.sparkBalance) : GAME_RULES.startingSparks,
     dailySparkGrantDates: Array.isArray(user?.dailySparkGrantDates) ? [...user.dailySparkGrantDates] : [activeDateKey],
+    holdings: normalizeHolding(user?.holdings),
     stake: user?.stake || null,
-    missions: {
-      fiveDayWeeks: Array.isArray(user?.missions?.fiveDayWeeks) ? [...user.missions.fiveDayWeeks] : [],
-      firstWinRewarded: Boolean(user?.missions?.firstWinRewarded),
-      stakeRewarded: Boolean(user?.missions?.stakeRewarded)
-    },
-    redemptions: Array.isArray(user?.redemptions) ? [...user.redemptions] : []
+    adminTierOverride: typeof user?.adminTierOverride === "string" ? user.adminTierOverride : "",
+    adminActiveDaysOverride: Number.isFinite(Number(user?.adminActiveDaysOverride))
+      ? Math.max(0, Math.floor(Number(user.adminActiveDaysOverride)))
+      : null,
+    missions: normalizeMissionState(user?.missions)
   };
 
   if (!Number.isFinite(normalized.sparkBalance)) {
@@ -262,6 +323,31 @@ function normalizeUser(user, activeDateKey) {
   }
 
   return normalized;
+}
+
+function normalizeHolding(holding) {
+  return {
+    amountStt: Math.max(0, Number(holding?.amountStt || 0)),
+    since: holding?.since || null
+  };
+}
+
+function normalizeMissionState(missions = {}) {
+  return {
+    connectWalletRewarded: Boolean(missions.connectWalletRewarded),
+    profileRewarded: Boolean(missions.profileRewarded),
+    submitForecastDates: asArray(missions.submitForecastDates),
+    correctForecastDates: asArray(missions.correctForecastDates),
+    fiveForecastWeeks: asArray(missions.fiveForecastWeeks || missions.fiveDayWeeks),
+    threeCorrectWeeks: asArray(missions.threeCorrectWeeks),
+    perfectWeeks: asArray(missions.perfectWeeks),
+    holdSevenDayWeeks: asArray(missions.holdSevenDayWeeks),
+    stakeSevenDayWeeks: asArray(missions.stakeSevenDayWeeks)
+  };
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? [...value] : [];
 }
 
 function normalizePrediction(prediction) {
@@ -277,6 +363,12 @@ function normalizePrediction(prediction) {
     amountSparks,
     mode: prediction.mode || "paper",
     stakingMultiplier: Number(prediction.stakingMultiplier || 1),
+    tierId: prediction.tierId || "spark",
+    tierMultiplier: Number(prediction.tierMultiplier || prediction.stakingMultiplier || 1),
+    activeStreakDays: Number.isFinite(Number(prediction.activeStreakDays))
+      ? Math.max(0, Math.floor(Number(prediction.activeStreakDays)))
+      : Number(prediction.priorWinStreak || 0),
+    streakMultiplier: Number(prediction.streakMultiplier || activeStreakMultiplierForDays(prediction.activeStreakDays ?? prediction.priorWinStreak ?? 0)),
     editCount: Number(prediction.editCount || 0),
     updatedAt: prediction.updatedAt || createdAt,
     history: Array.isArray(prediction.history) && prediction.history.length
@@ -330,18 +422,21 @@ function createDefaultState() {
   });
 
   return {
-    version: 5,
+    version: 6,
     user: {
       wallet: DEMO_WALLET,
+      username: "",
+      profileSetAt: null,
       sparkBalance: GAME_RULES.startingSparks,
       dailySparkGrantDates: [activeDateKey],
-      stake: null,
-      missions: {
-        fiveDayWeeks: [],
-        firstWinRewarded: false,
-        stakeRewarded: false
+      holdings: {
+        amountStt: 0,
+        since: null
       },
-      redemptions: []
+      stake: null,
+      adminTierOverride: "",
+      adminActiveDaysOverride: null,
+      missions: normalizeMissionState()
     },
     sparkLedger: [{
       id: `SL-initial-${Date.now()}`,
@@ -414,15 +509,13 @@ function createRound(dateKey, overrides = {}) {
   return {
     id: roundIdForDateKey(dateKey),
     roundDate: dateKey,
-    title: `Silver Pulse ${dateKey}`,
+    title: `Silver Forecast ${dateKey}`,
     openingPrice: overrides.openingPrice ?? 78,
     currentPrice: overrides.currentPrice ?? 78.42,
     closingPrice: overrides.closingPrice ?? null,
     winningSide: overrides.winningSide ?? null,
     resultOverride: overrides.resultOverride ?? "",
     status: overrides.status ?? "open",
-    rewardPoolCents: overrides.rewardPoolCents ?? 0,
-    maxWinners: overrides.maxWinners ?? 0,
     startTime: startTime.toISOString(),
     predictionCutoffTime: cutoffTime.toISOString(),
     settlementTime: cutoffTime.toISOString(),
@@ -445,6 +538,10 @@ function seedPredictions(round, rows) {
       amountSparks,
       mode: "paper",
       stakingMultiplier: 1,
+      tierId: "spark",
+      tierMultiplier: 1,
+      activeStreakDays: Math.max(0, priorWinStreak + 1),
+      streakMultiplier: activeStreakMultiplierForDays(Math.max(0, priorWinStreak + 1)),
       createdAt,
       updatedAt: createdAt,
       editCount: 0,
@@ -476,6 +573,10 @@ function seedPastPredictions(round, winningSide) {
       amountSparks,
       mode: "paper",
       stakingMultiplier: 1,
+      tierId: "spark",
+      tierMultiplier: 1,
+      activeStreakDays: Math.max(0, 2 - index),
+      streakMultiplier: activeStreakMultiplierForDays(Math.max(0, 2 - index)),
       createdAt,
       updatedAt: createdAt,
       editCount: 0,
@@ -585,20 +686,6 @@ function addDays(date, days) {
   return next;
 }
 
-function formatUsd(value) {
-  return `US$${Number(value).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-}
-
-function formatUsdtFromCents(cents) {
-  return `${(Number(cents) / 100).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })} USDT`;
-}
-
 function formatPrice(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return "-";
@@ -612,6 +699,16 @@ function formatPrice(value) {
 
 function formatSparkAmount(value) {
   return `${Number(value).toLocaleString("en-US")} Sparks`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
 }
 
 function formatDateTime(value) {
@@ -663,7 +760,35 @@ function formatDuration(ms) {
 }
 
 function formatMultiplier(value) {
-  return `${Number(value).toFixed(1)}x`;
+  return `${Number(value || 1).toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2
+  })}x`;
+}
+
+function formatSttAmount(value) {
+  return `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })} STT`;
+}
+
+function formatSttCompact(value) {
+  return Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
+function normalizeStakeAmount(value) {
+  const numeric = Number(value);
+  const safeValue = Number.isFinite(numeric) ? numeric : GAME_RULES.minStakeStt;
+  const stepped = Math.round(safeValue / GAME_RULES.stakeStepStt) * GAME_RULES.stakeStepStt;
+  return Number(Math.max(GAME_RULES.minStakeStt, stepped).toFixed(1));
+}
+
+function formatStakeInputValue(value) {
+  return normalizeStakeAmount(value).toFixed(1);
 }
 
 function toDatetimeLocalValue(value) {
@@ -715,12 +840,97 @@ function stakeUnlockTime() {
   return getUser().stake?.unlockAt || null;
 }
 
-function currentModeLabel() {
-  return isUserStaked() ? "Trading Mode" : "Paper Mode";
+function stakedAmountStt(user = getUser()) {
+  return user.stake?.active ? Math.max(0, Number(user.stake.amountStt || 0)) : 0;
 }
 
-function currentModeMeta() {
-  return isUserStaked() ? "1 STT staked" : "Demo Sparks only";
+function heldAmountStt(user = getUser()) {
+  return Math.max(0, Number(user.holdings?.amountStt || 0));
+}
+
+function holdingDays(user = getUser()) {
+  return daysSince(user.holdings?.since);
+}
+
+function stakingDays(user = getUser()) {
+  return user.stake?.active ? daysSince(user.stake.stakedAt) : 0;
+}
+
+function daysSince(value) {
+  if (!value) {
+    return 0;
+  }
+
+  const start = new Date(value).getTime();
+  if (!Number.isFinite(start)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - start) / 86400000));
+}
+
+function isoDaysAgo(days) {
+  return new Date(Date.now() - Math.max(0, Math.floor(Number(days || 0))) * 86400000).toISOString();
+}
+
+function tierById(id) {
+  return GAME_RULES.tiers.find((tier) => tier.id === id) || GAME_RULES.tiers[GAME_RULES.tiers.length - 1];
+}
+
+function currentUserTier(user = getUser()) {
+  if (user.adminTierOverride) {
+    return tierById(user.adminTierOverride);
+  }
+
+  return tierForBalances(heldAmountStt(user), holdingDays(user), stakedAmountStt(user), stakingDays(user));
+}
+
+function tierForBalances(heldStt, heldDays, stakedStt, stakedDays) {
+  return GAME_RULES.tiers.find((tier) => {
+    if (tier.id === "spark") {
+      return true;
+    }
+
+    const holdQualifies = Number.isFinite(Number(tier.minHoldStt)) &&
+      heldStt >= Number(tier.minHoldStt) &&
+      heldDays >= Number(tier.minDays || 0);
+    const stakeQualifies = Number.isFinite(Number(tier.minStakeStt)) &&
+      stakedStt >= Number(tier.minStakeStt) &&
+      stakedDays >= Number(tier.minDays || 0);
+
+    return holdQualifies || stakeQualifies;
+  }) || tierById("spark");
+}
+
+function tierQualifiesForUser(user, tier) {
+  if (!tier || tier.id === "spark") {
+    return true;
+  }
+
+  const holdQualifies = Number.isFinite(Number(tier.minHoldStt)) &&
+    heldAmountStt(user) >= Number(tier.minHoldStt) &&
+    holdingDays(user) >= Number(tier.minDays || 0);
+  const stakeQualifies = Number.isFinite(Number(tier.minStakeStt)) &&
+    stakedAmountStt(user) >= Number(tier.minStakeStt) &&
+    stakingDays(user) >= Number(tier.minDays || 0);
+
+  return holdQualifies || stakeQualifies;
+}
+
+function currentTierLabel(user = getUser()) {
+  const tier = currentUserTier(user);
+  return `${tier.label} ${formatMultiplier(tier.multiplier)}`;
+}
+
+function currentTierMeta(user = getUser()) {
+  const tier = currentUserTier(user);
+  return user.adminTierOverride ? "Tier override active" : tier.description;
+}
+
+function predictionTierSummary(prediction) {
+  const tier = tierById(prediction?.tierId || "spark");
+  const multiplier = Number(prediction?.tierMultiplier || tier.multiplier);
+  return `${tier.label} ${formatMultiplier(multiplier)}`;
 }
 
 function applySparkChange(amount, type, reason, roundId = null) {
@@ -762,6 +972,211 @@ function ensureDailySparkGrant(showMessage = false) {
     showToast("Daily Sparks skipped because your balance is above 100.");
   }
   return false;
+}
+
+function ensureConnectWalletMission(showMessage = false) {
+  if (!walletConnected) {
+    return false;
+  }
+
+  const user = getUser();
+  if (user.missions.connectWalletRewarded) {
+    return false;
+  }
+
+  user.missions.connectWalletRewarded = true;
+  applySparkChange(GAME_RULES.missionRewards.connectWallet, "mission", "Mission: connect wallet", null);
+  saveState();
+
+  if (showMessage) {
+    showToast(`Wallet mission complete: +${formatSparkAmount(GAME_RULES.missionRewards.connectWallet)}.`);
+  }
+
+  return true;
+}
+
+function awardMissionOnce(flagName, rewardKey, reason, roundId = null) {
+  const user = getUser();
+  if (user.missions[flagName]) {
+    return false;
+  }
+
+  user.missions[flagName] = true;
+  applySparkChange(GAME_RULES.missionRewards[rewardKey], "mission", reason, roundId);
+  return true;
+}
+
+function awardMissionForDate(listName, dateKey, rewardKey, reason, roundId = null) {
+  const user = getUser();
+  const list = user.missions[listName];
+  if (!Array.isArray(list) || list.includes(dateKey)) {
+    return false;
+  }
+
+  list.push(dateKey);
+  applySparkChange(GAME_RULES.missionRewards[rewardKey], "mission", reason, roundId);
+  return true;
+}
+
+function awardMissionForWeek(listName, weekKey, rewardKey, reason) {
+  const user = getUser();
+  const list = user.missions[listName];
+  if (!Array.isArray(list) || list.includes(weekKey)) {
+    return false;
+  }
+
+  list.push(weekKey);
+  applySparkChange(GAME_RULES.missionRewards[rewardKey], "mission", reason, null);
+  return true;
+}
+
+function refreshCampaignMissions() {
+  if (!walletConnected) {
+    return false;
+  }
+
+  let changed = false;
+  changed = awardWeeklyForecastMissionsIfEarned() || changed;
+  changed = awardWeeklyCorrectMissionsIfEarned() || changed;
+  changed = awardHoldingAndStakeMissionsIfEarned() || changed;
+
+  if (changed) {
+    saveState();
+  }
+
+  return changed;
+}
+
+function forecastDatesForWallet(wallet = DEMO_WALLET) {
+  return new Set(
+    pulseState.predictions
+      .filter((prediction) => prediction.wallet === wallet)
+      .map((prediction) => pulseState.rounds.find((round) => round.id === prediction.roundId)?.roundDate)
+      .filter(Boolean)
+  );
+}
+
+function correctForecastDatesForWallet(wallet = DEMO_WALLET) {
+  return new Set(
+    pulseState.predictions
+      .filter((prediction) => prediction.wallet === wallet)
+      .map((prediction) => {
+        const round = pulseState.rounds.find((item) => item.id === prediction.roundId);
+        if (!round || round.status !== "settled" || round.winningSide === "FLAT" || prediction.side !== round.winningSide) {
+          return null;
+        }
+        return round.roundDate;
+      })
+      .filter(Boolean)
+  );
+}
+
+function weekTradingDays(weekKey) {
+  return Array.from({ length: 5 }, (_, index) => addDateKey(weekKey, index));
+}
+
+function countDatesInWeek(dateSet, weekKey) {
+  return weekTradingDays(weekKey).filter((dateKey) => dateSet.has(dateKey)).length;
+}
+
+function awardDailySubmitMission(round) {
+  return awardMissionForDate(
+    "submitForecastDates",
+    round.roundDate,
+    "submitForecastDaily",
+    "Mission: submit daily forecast",
+    round.id
+  );
+}
+
+function awardDailyCorrectMission(round) {
+  const dailyChanged = awardMissionForDate(
+    "correctForecastDates",
+    round.roundDate,
+    "correctForecastDaily",
+    "Mission: correct daily forecast",
+    round.id
+  );
+  const weeklyChanged = awardWeeklyCorrectMissionsIfEarned();
+  return dailyChanged || weeklyChanged;
+}
+
+function awardWeeklyForecastMissionsIfEarned() {
+  const forecastDates = forecastDatesForWallet();
+  const weekKeys = new Set(Array.from(forecastDates).map(weekKeyForDateKey));
+  let changed = false;
+
+  weekKeys.forEach((weekKey) => {
+    if (countDatesInWeek(forecastDates, weekKey) >= 5) {
+      changed = awardMissionForWeek(
+        "fiveForecastWeeks",
+        weekKey,
+        "fiveForecastWeek",
+        "Mission: 5 forecasts in one week"
+      ) || changed;
+    }
+  });
+
+  return changed;
+}
+
+function awardWeeklyCorrectMissionsIfEarned() {
+  const correctDates = correctForecastDatesForWallet();
+  const weekKeys = new Set(Array.from(correctDates).map(weekKeyForDateKey));
+  let changed = false;
+
+  weekKeys.forEach((weekKey) => {
+    const correctCount = countDatesInWeek(correctDates, weekKey);
+    if (correctCount >= 3) {
+      changed = awardMissionForWeek(
+        "threeCorrectWeeks",
+        weekKey,
+        "threeCorrectWeek",
+        "Mission: 3 correct forecasts in one week"
+      ) || changed;
+    }
+
+    if (correctCount >= 5) {
+      changed = awardMissionForWeek(
+        "perfectWeeks",
+        weekKey,
+        "perfectWeek",
+        "Mission: perfect 5/5 forecast week"
+      ) || changed;
+    }
+  });
+
+  return changed;
+}
+
+function awardHoldingAndStakeMissionsIfEarned() {
+  const user = getUser();
+  const weekKey = weekKeyForDateKey(activeTradingDateKey(new Date()));
+  let changed = false;
+
+  if (heldAmountStt(user) >= 0.1 && holdingDays(user) >= GAME_RULES.stakeLockDays) {
+    changed = awardMissionForWeek(
+      "holdSevenDayWeeks",
+      weekKey,
+      "holdSevenDays",
+      "Mission: hold STT for 7 days"
+    ) || changed;
+  }
+
+  if (stakedAmountStt(user) > 0 && stakingDays(user) >= GAME_RULES.stakeLockDays) {
+    changed = awardMissionForWeek(
+      "stakeSevenDayWeeks",
+      weekKey,
+      "stakeSevenDays",
+      "Mission: stake STT for 7 days"
+    ) || changed;
+  }
+
+  return changed;
+}
+
+function raffleTicketsForSparks(sparks) {
+  return GAME_RULES.automaticRaffleTickets + Math.floor(Math.max(0, Number(sparks || 0)) / GAME_RULES.raffleSparksPerTicket);
 }
 
 function effectiveStatus(round) {
@@ -903,7 +1318,9 @@ function launchPredictionCelebration(side, triggerButton) {
 
 function render() {
   if (walletConnected) {
+    ensureConnectWalletMission(false);
     ensureDailySparkGrant(false);
+    refreshCampaignMissions();
   }
 
   const round = getActiveRound();
@@ -933,7 +1350,6 @@ function renderWallet() {
 
 function renderHero(round) {
   const status = effectiveStatus(round);
-  const yieldPercent = estimatedAnnualizedYieldPercent();
   els.pulseRoundPill.innerHTML = `
     <span>${round.roundDate}</span>
     <strong>${status.toUpperCase()}</strong>
@@ -950,7 +1366,6 @@ function renderHero(round) {
     <small>demo feed</small>
   `;
   els.heroRewardPool.textContent = walletConnected ? formatSparkAmount(getUser().sparkBalance) : "10 Sparks";
-  els.heroMaxWinners.textContent = `${Math.round(yieldPercent)}%`;
 }
 
 function renderRound(round) {
@@ -981,7 +1396,7 @@ function renderRound(round) {
     } else if (Number(prediction.editCount || 0) < 1) {
       els.betLimitText.textContent = `One edit allowed. New amount can be ${GAME_RULES.minBetSparks}-${dailyRemaining} Sparks.`;
     } else {
-      els.betLimitText.textContent = "Edit used. The latest valid guess will settle.";
+      els.betLimitText.textContent = "Edit used. The latest valid forecast will settle.";
     }
   }
 
@@ -994,7 +1409,7 @@ function renderRound(round) {
   if (!walletConnected) {
     els.userPredictionStatus.innerHTML = `
       <span>Status</span>
-      <strong>Connect wallet to enter paper mode</strong>
+      <strong>Connect wallet to enter Silver Forecast</strong>
     `;
     return;
   }
@@ -1002,8 +1417,8 @@ function renderRound(round) {
   if (prediction) {
     const editText = canEdit ? "1 edit available" : "edit used";
     els.userPredictionStatus.innerHTML = `
-      <span>Latest valid guess</span>
-      <strong>${prediction.side} - ${formatSparkAmount(prediction.amountSparks)} - ${prediction.mode === "real" ? "real" : "paper"} - ${editText}</strong>
+      <span>Latest valid forecast</span>
+      <strong>${prediction.side} - ${formatSparkAmount(prediction.amountSparks)} - ${predictionTierSummary(prediction)} - ${editText}</strong>
     `;
     return;
   }
@@ -1174,11 +1589,7 @@ function renderRoundDetails(round) {
   const bonusPreview = selectedBonusPreview(scorePreview);
 
   els.roundDetailStats.innerHTML = `
-    <div class="stat">
-      <span class="metric-label">Session</span>
-      <strong class="metric-value">${formatHkDateTime(round.startTime)} - ${formatHkDateTime(round.predictionCutoffTime)}</strong>
-    </div>
-    <div class="stat">
+    <div class="stat stat-wide">
       <span class="metric-label">Resolve</span>
       <strong class="metric-value"><a class="text-link" href="https://www.lbma.org.uk/prices-and-data/precious-metal-prices" target="_blank" rel="noreferrer">LBMA silver price</a></strong>
     </div>
@@ -1188,7 +1599,10 @@ function renderRoundDetails(round) {
   document.querySelector("#basePointValue").textContent = formatSparkAmount(scorePreview.amountSparks);
   document.querySelector("#bonusLabelValue").textContent = bonusPreview.label;
   document.querySelector("#bonusMultiplierValue").textContent = formatMultiplier(bonusPreview.multiplier);
-  document.querySelector("#bonusMetaValue").textContent = bonusPreview.meta;
+  document.querySelector("#bonusMetaValue").innerHTML = tierMiniBadgeMarkup(scorePreview.tier);
+  document.querySelector("#streakMultiplierValue").textContent = formatMultiplier(scorePreview.streakMultiplier);
+  document.querySelector("#streakMetaValue").textContent = `${scorePreview.activeStreakDays} active day${scorePreview.activeStreakDays === 1 ? "" : "s"}`;
+  document.querySelector("#finalMultiplierValue").textContent = formatMultiplier(scorePreview.finalMultiplier);
 }
 
 function leaderboardWeeks(state = pulseState) {
@@ -1233,13 +1647,13 @@ function renderLeaderboard() {
   els.leaderboardWeekSelect.disabled = true;
 
   if (!rows.length) {
-    els.leaderboardSummary.textContent = "No settled Spark totals yet.";
+    els.leaderboardSummary.textContent = "All time";
     els.leaderboardWeekSelect.disabled = true;
     els.leaderboardPanel.innerHTML = `<div class="empty-state">All-time Spark totals will appear after the first settled winner.</div>`;
     return;
   }
 
-  els.leaderboardSummary.textContent = `${rows.length} wallet${rows.length === 1 ? "" : "s"} ranked by all-time Sparks.`;
+  els.leaderboardSummary.textContent = "All time";
 
   els.leaderboardPanel.innerHTML = `
     <div class="pulse-table all-time-leaderboard-table">
@@ -1403,72 +1817,124 @@ function calculateScore(prediction, round) {
 }
 
 function calculatePredictionOutcome(prediction, round) {
-  const priorWinStreak = prediction.priorWinStreak ?? calculatePriorWinStreak(prediction.wallet, round.roundDate);
-  const streakMultiplier = streakMultiplierForPriorWins(priorWinStreak);
-  const stakingMultiplier = Number(prediction.stakingMultiplier || 1);
-  const finalMultiplier = Math.max(stakingMultiplier, streakMultiplier);
+  const liveSnapshot = shouldUseLiveMultiplier(prediction, round)
+    ? liveMultiplierSnapshotForWallet(prediction.wallet, round)
+    : null;
+  const activeStreakDays = liveSnapshot
+    ? liveSnapshot.activeStreakDays
+    : Number.isFinite(Number(prediction.activeStreakDays))
+      ? Math.max(0, Math.floor(Number(prediction.activeStreakDays)))
+      : calculateActiveStreakDaysForPrediction(prediction.wallet, round.roundDate);
+  const tierMultiplier = liveSnapshot
+    ? liveSnapshot.tier.multiplier
+    : Number(prediction.tierMultiplier || prediction.stakingMultiplier || 1);
+  const streakMultiplier = liveSnapshot
+    ? liveSnapshot.streakMultiplier
+    : Number(prediction.streakMultiplier || activeStreakMultiplierForDays(activeStreakDays));
+  const rawMultiplier = tierMultiplier * streakMultiplier;
+  const finalMultiplier = Math.min(GAME_RULES.maxTotalMultiplier, rawMultiplier);
   const sparkProfit = Math.round(Number(prediction.amountSparks || 0) * finalMultiplier);
 
   return {
-    priorWinStreak,
+    activeStreakDays,
+    tierId: liveSnapshot ? liveSnapshot.tier.id : prediction.tierId || "spark",
+    tierMultiplier,
     streakMultiplier,
-    stakingMultiplier,
     finalMultiplier,
     returnedStake: Number(prediction.amountSparks || 0),
     sparkProfit
   };
 }
 
-function streakMultiplierForPriorWins(priorWinStreak) {
-  const rule = GAME_RULES.streakMultipliers.find((item) => priorWinStreak >= item.priorWins);
+function activeStreakMultiplierForDays(activeDays) {
+  const rule = GAME_RULES.streakMultipliers.find((item) => Number(activeDays || 0) >= item.activeDays);
   return rule ? rule.multiplier : 1;
 }
 
 function scorePreviewForWallet(round) {
   const prediction = currentWalletPrediction(round);
   const amountSparks = prediction ? prediction.amountSparks : betAmountFromInput();
-  const priorWinStreak = prediction?.priorWinStreak ?? (walletConnected ? calculatePriorWinStreak(DEMO_WALLET, round.roundDate) : 0);
-  const streakMultiplier = streakMultiplierForPriorWins(priorWinStreak);
-  const stakingMultiplier = isUserStaked() ? GAME_RULES.stakeWinMultiplier : 1;
-  const finalMultiplier = Math.max(stakingMultiplier, streakMultiplier);
+  const liveSnapshot = walletConnected
+    ? liveMultiplierSnapshotForWallet(DEMO_WALLET, round)
+    : {
+      tier: tierById("spark"),
+      activeStreakDays: 0,
+      streakMultiplier: 1,
+      finalMultiplier: 1
+    };
+  const tier = liveSnapshot.tier;
+  const activeStreakDays = liveSnapshot.activeStreakDays;
+  const streakMultiplier = liveSnapshot.streakMultiplier;
+  const tierMultiplier = tier.multiplier;
+  const finalMultiplier = Math.min(GAME_RULES.maxTotalMultiplier, tierMultiplier * streakMultiplier);
 
   return {
     amountSparks,
-    priorWinStreak,
+    tier,
+    activeStreakDays,
+    tierMultiplier,
     streakMultiplier,
-    stakingMultiplier,
     finalMultiplier,
     sparkProfit: Math.round(amountSparks * finalMultiplier)
   };
 }
 
-function selectedBonusPreview(scorePreview) {
-  const useStreakBonus = scorePreview.streakMultiplier >= scorePreview.stakingMultiplier;
-  const multiplier = useStreakBonus ? scorePreview.streakMultiplier : scorePreview.stakingMultiplier;
-  const isMax = multiplier >= GAME_RULES.stakeWinMultiplier;
+function multiplierSnapshotForRound(round) {
+  const snapshot = liveMultiplierSnapshotForWallet(DEMO_WALLET, round);
 
   return {
-    label: useStreakBonus ? "Streak bonus" : "Stake bonus",
-    multiplier,
-    meta: isMax
-      ? "MAX"
-      : `${scorePreview.priorWinStreak} prior win${scorePreview.priorWinStreak === 1 ? "" : "s"}`
+    tierId: snapshot.tier.id,
+    tierMultiplier: snapshot.tier.multiplier,
+    activeStreakDays: snapshot.activeStreakDays,
+    streakMultiplier: snapshot.streakMultiplier,
+    finalMultiplier: snapshot.finalMultiplier
   };
 }
 
-function calculatePriorWinStreak(wallet, beforeRoundDate) {
-  const priorRounds = pulseState.rounds
-    .filter((round) => round.roundDate < beforeRoundDate && round.status === "settled")
-    .sort((a, b) => b.roundDate.localeCompare(a.roundDate));
+function liveMultiplierSnapshotForWallet(wallet, round) {
+  const tier = wallet === DEMO_WALLET ? currentUserTier() : tierById("spark");
+  const activeStreakDays = calculateActiveStreakDaysForPrediction(wallet, round.roundDate);
+  const streakMultiplier = activeStreakMultiplierForDays(activeStreakDays);
+  const finalMultiplier = Math.min(GAME_RULES.maxTotalMultiplier, tier.multiplier * streakMultiplier);
+
+  return {
+    tier,
+    activeStreakDays,
+    streakMultiplier,
+    finalMultiplier
+  };
+}
+
+function shouldUseLiveMultiplier(prediction, round) {
+  return prediction?.wallet === DEMO_WALLET && round?.status !== "settled";
+}
+
+function selectedBonusPreview(scorePreview) {
+  return {
+    label: "Tier multiplier",
+    multiplier: scorePreview.tierMultiplier,
+    meta: scorePreview.tier?.label || tierById("spark").label
+  };
+}
+
+function calculateActiveStreakDaysForPrediction(wallet, roundDate) {
+  const user = wallet === DEMO_WALLET ? getUser() : null;
+  if (user && user.adminActiveDaysOverride !== null) {
+    return user.adminActiveDaysOverride;
+  }
+
+  const forecastDates = forecastDatesForWallet(wallet);
+  forecastDates.add(roundDate);
+  return consecutiveTradingDateCount(roundDate, forecastDates);
+}
+
+function consecutiveTradingDateCount(endDateKey, dateSet) {
+  let cursor = endDateKey;
   let streak = 0;
 
-  for (const round of priorRounds) {
-    const prediction = pulseState.predictions.find((item) => item.roundId === round.id && item.wallet === wallet);
-    if (!prediction || prediction.side !== round.winningSide || round.winningSide === "FLAT") {
-      break;
-    }
-
+  while (dateSet.has(cursor)) {
     streak += 1;
+    cursor = previousTradingDateKey(cursor);
   }
 
   return streak;
@@ -1505,9 +1971,62 @@ function renderHistory() {
   `;
 }
 
+function tierMiniBadgeMarkup(tier, showName = true) {
+  const safeTier = tier || tierById("spark");
+  return `<span class="tier-mini-badge tier-${escapeHtml(safeTier.id)}" aria-hidden="true"></span>${showName ? `<span class="tier-mini-name">${escapeHtml(safeTier.label)}</span>` : ""}`;
+}
+
+function tierRequirementMarkup(user, currentTier, tier) {
+  const qualifies = tierQualifiesForUser(user, tier);
+  const isCurrent = tier.id === currentTier.id;
+  const statusText = isCurrent
+    ? user.adminTierOverride ? "Override" : "Current"
+    : qualifies ? "Qualified" : "Locked";
+
+  return `
+    <div class="tier-requirement-row ${isCurrent ? "is-current" : ""} ${qualifies ? "is-qualified" : ""}">
+      <div class="tier-requirement-main">
+        <strong>${tierMiniBadgeMarkup(tier, false)} <span>${escapeHtml(tier.label)}</span></strong>
+        <small>${escapeHtml(tier.description)}</small>
+      </div>
+      <div class="tier-requirement-meta">
+        <strong>${formatMultiplier(tier.multiplier)}</strong>
+        <span>${statusText}</span>
+      </div>
+    </div>
+  `;
+}
+
+function tierUpgradeTipsMarkup(user, tier) {
+  const orderedTiers = [...GAME_RULES.tiers].reverse();
+  const nextLockedTier = orderedTiers.find((item) => !tierQualifiesForUser(user, item));
+  const headline = user.adminTierOverride
+    ? "Tier override is active"
+    : nextLockedTier
+      ? `Next: ${nextLockedTier.label}`
+      : "Highest tier active";
+  const tip = user.adminTierOverride
+    ? "Clear the tier override to test automatic wallet qualification."
+    : nextLockedTier
+      ? `${nextLockedTier.description}.`
+      : "Your wallet already qualifies for the top campaign tier.";
+
+  return `
+    <div class="tier-upgrade-tips">
+      <span>Tier guide</span>
+      <strong>${headline}</strong>
+      <p>${tip}</p>
+      <p>Current wallet: ${formatSttAmount(heldAmountStt(user))} held for ${holdingDays(user)} day${holdingDays(user) === 1 ? "" : "s"}; ${formatSttAmount(stakedAmountStt(user))} staked for ${stakingDays(user)} day${stakingDays(user) === 1 ? "" : "s"}.</p>
+      <div class="tier-requirement-list">
+        ${orderedTiers.map((item) => tierRequirementMarkup(user, tier, item)).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderProfile() {
   if (!walletConnected) {
-    els.profilePanel.innerHTML = `<div class="empty-state">Connect wallet to view Sparks, staking, missions, and local guess history.</div>`;
+    els.profilePanel.innerHTML = `<div class="empty-state">Connect wallet to view Sparks, tier, raffle tickets, missions, and forecast history.</div>`;
     return;
   }
 
@@ -1516,6 +2035,8 @@ function renderProfile() {
     .filter((prediction) => prediction.wallet === DEMO_WALLET)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const missions = missionStatus();
+  const tier = currentUserTier(user);
+  const raffleTickets = raffleTicketsForSparks(user.sparkBalance);
 
   els.profilePanel.innerHTML = `
     <div class="profile-economy">
@@ -1525,52 +2046,90 @@ function renderProfile() {
         <small>${user.sparkBalance > GAME_RULES.freeSparkCap ? "Daily free Sparks paused above 100." : `Next eligible daily reward: ${GAME_RULES.dailySparks} Sparks.`}</small>
       </div>
       <div class="profile-card">
-        <span class="metric-label">Mode</span>
-        <strong>${currentModeLabel()}</strong>
-        <small>${stakeStatusText()}</small>
-        <div class="profile-actions">
-          ${stakeActionButton()}
-        </div>
+        <span class="metric-label">Raffle Tickets</span>
+        <strong>${raffleTickets.toLocaleString("en-US")}</strong>
+        <small>1 base ticket + 1 ticket for each ${GAME_RULES.raffleSparksPerTicket} Sparks.</small>
       </div>
-      <div class="profile-card">
-        <span class="metric-label">Redeem</span>
-        <strong>${GAME_RULES.sparksPerUsdt.toLocaleString("en-US")} Sparks = 1 USDT</strong>
-        <small>${isUserStaked() ? "Trading Mode wallets can redeem Sparks." : "Stake 1 STT to unlock redemption."}</small>
-        <div class="profile-actions">
-          <button class="ghost-button compact" type="button" data-profile-action="redeem">Redeem 1 USDT</button>
-        </div>
+      <div class="profile-card tier-profile-card">
+        <span class="metric-label">Tier</span>
+        <strong class="profile-tier-title">${tierMiniBadgeMarkup(tier, false)} <span>${tier.label} - ${formatMultiplier(tier.multiplier)}</span></strong>
+        <small>${tier.description}. ${tier.payoutEligible ? "Leaderboard payout eligible." : "Raffle access only."}</small>
+        ${tierUpgradeTipsMarkup(user, tier)}
+      </div>
+      <div class="profile-card profile-setup-card">
+        <span class="metric-label">Profile</span>
+        <strong>${user.username ? escapeHtml(user.username) : "Set username"}</strong>
+        <small>${user.missions.profileRewarded ? "Profile mission complete." : `Set a username to earn ${formatSparkAmount(GAME_RULES.missionRewards.setProfile)}.`}</small>
+        <form class="profile-setup-form" data-profile-form>
+          <label for="profileUsernameInput" class="sr-only">Username</label>
+          <input id="profileUsernameInput" name="username" type="text" maxlength="24" placeholder="Username" value="${escapeHtml(user.username)}">
+          <button class="ghost-button compact" type="submit">Save</button>
+        </form>
+      </div>
+      <div class="profile-card staking-profile-card">
+        <span class="metric-label">STT Stake</span>
+        <strong>${isUserStaked() ? formatSttAmount(stakedAmountStt(user)) : "Not staked"}</strong>
+        <small>${stakeStatusText()}</small>
+        ${stakeControlsMarkup(user)}
       </div>
     </div>
 
-    <div class="mission-grid">
-      ${renderMissionCard("streak", "01", "5-Day Guess", `Submit guesses for 5 consecutive trading days in the same Monday-Friday week.`, missions.fiveDayWeek, GAME_RULES.missionRewards.fiveDayWeek)}
-      ${renderMissionCard("win", "02", "First Daily Win", "Score your first winning guess of a day.", missions.firstWinningGuess, GAME_RULES.missionRewards.firstWinningGuess)}
-      ${renderMissionCard("stake", "03", "Stake STT", "Stake 1 STT for at least one week to unlock Trading Mode.", missions.stakeStt, GAME_RULES.missionRewards.stakeStt)}
+    <div class="mission-board">
+      ${renderMissionGroup("Start", "One-time setup", [
+        renderMissionCard("start", "One-time", "Connect wallet", "Connect your wallet to enter Silver Forecast.", missions.connectWallet, GAME_RULES.missionRewards.connectWallet),
+        renderMissionCard("start", "One-time", "Set profile", "Save a username in your profile.", missions.profile, GAME_RULES.missionRewards.setProfile)
+      ])}
+      ${renderMissionGroup("Daily", "Trading-window habits", [
+        renderMissionCard("daily", "Daily", "Submit Daily Forecast", `Submit during the HKT trading window. ${missions.forecastToday ? "Done today." : "Open today."}`, missions.forecastToday, GAME_RULES.missionRewards.submitForecastDaily),
+        renderMissionCard("skill", "Daily", "Correct Daily Forecast", "Win today's forecast after settlement.", missions.correctToday, GAME_RULES.missionRewards.correctForecastDaily)
+      ])}
+      ${renderMissionGroup("Weekly", "Retention and STT conversion", [
+        renderMissionCard("weekly", "Weekly", "5 forecasts in one week", `${missions.weekForecastCount}/5 forecasts this week.`, missions.fiveForecastWeek, GAME_RULES.missionRewards.fiveForecastWeek),
+        renderMissionCard("skill", "Weekly", "3 correct forecasts", `${missions.weekCorrectCount}/3 correct forecasts this week.`, missions.threeCorrectWeek, GAME_RULES.missionRewards.threeCorrectWeek),
+        renderMissionCard("perfect", "Weekly", "Perfect 5/5 week", `${missions.weekCorrectCount}/5 correct forecasts this week.`, missions.perfectWeek, GAME_RULES.missionRewards.perfectWeek),
+        renderMissionCard("holder", "Weekly", "Hold STT for 7 days", `${formatSttAmount(heldAmountStt(user))} held for ${holdingDays(user)} day${holdingDays(user) === 1 ? "" : "s"}.`, missions.holdSevenDays, GAME_RULES.missionRewards.holdSevenDays),
+        renderMissionCard("staker", "Weekly", "Stake STT for 7 days", `${formatSttAmount(stakedAmountStt(user))} staked for ${stakingDays(user)} day${stakingDays(user) === 1 ? "" : "s"}.`, missions.stakeSevenDays, GAME_RULES.missionRewards.stakeSevenDays)
+      ])}
     </div>
 
     ${predictions.length ? `
       <div class="pulse-table profile-history-table">
         <div class="pulse-table-row pulse-table-head">
           <span>Round</span>
-          <span>Guess</span>
+          <span>Forecast</span>
           <span>Bet</span>
-          <span>Mode</span>
+          <span>Tier</span>
           <span>Result</span>
           <span>Net Sparks</span>
           <span>History</span>
         </div>
         ${predictions.map((prediction) => renderProfileRow(prediction)).join("")}
       </div>
-    ` : `<div class="empty-state">No guesses from ${shortWallet(DEMO_WALLET)} yet.</div>`}
+    ` : `<div class="empty-state">No forecasts from ${shortWallet(DEMO_WALLET)} yet.</div>`}
   `;
 }
 
-function renderMissionCard(type, step, title, body, complete, reward) {
+function renderMissionGroup(title, subtitle, cards) {
+  return `
+    <section class="mission-column">
+      <div class="mission-column-head">
+        <strong>${title}</strong>
+        <span>${subtitle}</span>
+      </div>
+      <div class="mission-column-list">
+        ${cards.join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderMissionCard(type, scope, title, body, complete, reward) {
   return `
     <div class="mission-card mission-${type} ${complete ? "is-complete" : ""}">
+      ${complete ? `<span class="mission-complete-tag">Completed</span>` : ""}
       <div class="mission-head">
-        <span>${step}</span>
-        <small>${complete ? "Complete" : "Open"}</small>
+        <span>${scope}</span>
+        <small>${complete ? "Completed" : "Open"}</small>
       </div>
       <strong>${title}</strong>
       <p>${body}</p>
@@ -1583,26 +2142,41 @@ function renderMissionCard(type, step, title, body, complete, reward) {
 }
 
 function stakeStatusText() {
+  const user = getUser();
+  const tier = currentUserTier(user);
+
   if (!isUserStaked()) {
-    return `Unlock ${formatMultiplier(GAME_RULES.stakeWinMultiplier)} wins and estimated ${Math.round(estimatedAnnualizedYieldPercent())}% annualized Spark earning yield.`;
+    return `Current tier: ${tier.label} ${formatMultiplier(tier.multiplier)}. Stake from ${formatSttAmount(GAME_RULES.minStakeStt)} in ${formatSttAmount(GAME_RULES.stakeStepStt)} increments.`;
   }
 
-  const unlockAt = stakeUnlockTime();
-  if (unlockAt && Date.now() < new Date(unlockAt).getTime()) {
-    return `Locked until ${formatHkDateTime(unlockAt)} HKT.`;
-  }
-
-  return "Stake unlocked. You can unstake anytime.";
+  return `${stakingDays(user)} staking day${stakingDays(user) === 1 ? "" : "s"}. Current tier: ${tier.label} ${formatMultiplier(tier.multiplier)}. Tier eligibility requires 7 maintained days.`;
 }
 
-function stakeActionButton() {
+function stakeControlsMarkup(user = getUser()) {
   if (!isUserStaked()) {
-    return `<button class="primary-button compact" type="button" data-profile-action="stake">Stake 1 STT</button>`;
+    return `
+      <form class="stake-form" data-stake-form>
+        <label for="stakeAmountInput">Stake amount</label>
+        <div class="stake-input-row">
+          <input id="stakeAmountInput" name="amountStt" type="number" inputmode="decimal" min="${GAME_RULES.minStakeStt}" step="${GAME_RULES.stakeStepStt}" value="${formatStakeInputValue(GAME_RULES.minStakeStt)}">
+          <button class="primary-button compact" type="submit">Stake</button>
+        </div>
+      </form>
+    `;
   }
 
   const unlockAt = stakeUnlockTime();
-  const disabled = unlockAt && Date.now() < new Date(unlockAt).getTime();
-  return `<button class="ghost-button compact" type="button" data-profile-action="unstake"${disabled ? " disabled" : ""}>Unstake STT</button>`;
+  return `
+    <div class="stake-meta-grid">
+      <span>Staking days</span>
+      <strong>${stakingDays(user)}</strong>
+      <span>7-day mark</span>
+      <strong>${unlockAt ? formatHkDateTime(unlockAt) : "Available"}</strong>
+    </div>
+    <div class="profile-actions">
+      <button class="ghost-button compact" type="button" data-profile-action="unstake">Unstake STT</button>
+    </div>
+  `;
 }
 
 function renderProfileRow(prediction) {
@@ -1624,7 +2198,7 @@ function renderProfileRow(prediction) {
       <span>${round ? round.roundDate : prediction.roundId}</span>
       <span>${prediction.side}</span>
       <span>${formatSparkAmount(prediction.amountSparks)}</span>
-      <span>${prediction.mode === "real" ? "Real" : "Paper"}</span>
+      <span class="tier-table-cell">${tierMiniBadgeMarkup(tierById(prediction.tierId || "spark"))} <small>${formatMultiplier(prediction.tierMultiplier || 1)}</small></span>
       <span>${result}</span>
       <span>${netText}</span>
       <span>${formatPredictionHistory(prediction)}</span>
@@ -1645,21 +2219,42 @@ function formatPredictionHistory(prediction) {
 
 function missionStatus() {
   const user = getUser();
+  const tradingDate = activeTradingDateKey(new Date());
+  const weekKey = weekKeyForDateKey(tradingDate);
+  const forecastDates = forecastDatesForWallet();
+  const correctDates = correctForecastDatesForWallet();
+  const weekForecastCount = countDatesInWeek(forecastDates, weekKey);
+  const weekCorrectCount = countDatesInWeek(correctDates, weekKey);
+
   return {
-    fiveDayWeek: user.missions.fiveDayWeeks.length > 0,
-    firstWinningGuess: user.missions.firstWinRewarded,
-    stakeStt: user.missions.stakeRewarded
+    connectWallet: user.missions.connectWalletRewarded,
+    profile: user.missions.profileRewarded,
+    forecastToday: user.missions.submitForecastDates.includes(tradingDate),
+    correctToday: user.missions.correctForecastDates.includes(tradingDate),
+    fiveForecastWeek: user.missions.fiveForecastWeeks.includes(weekKey),
+    threeCorrectWeek: user.missions.threeCorrectWeeks.includes(weekKey),
+    perfectWeek: user.missions.perfectWeeks.includes(weekKey),
+    holdSevenDays: user.missions.holdSevenDayWeeks.includes(weekKey),
+    stakeSevenDays: user.missions.stakeSevenDayWeeks.includes(weekKey),
+    weekForecastCount,
+    weekCorrectCount
   };
 }
 
 function populateAdminForm(round) {
+  const user = getUser();
   els.adminOpeningPrice.value = round.openingPrice ?? "";
   els.adminCurrentPrice.value = round.currentPrice ?? "";
   els.adminClosingPrice.value = round.closingPrice ?? "";
-  els.adminRewardPool.value = (round.rewardPoolCents / 100).toFixed(2);
-  els.adminMaxWinners.value = round.maxWinners || "";
   els.adminStatus.value = round.status;
-  els.adminSparkBalance.value = getUser().sparkBalance;
+  els.adminSparkBalance.value = user.sparkBalance;
+  els.adminUsername.value = user.username || "";
+  els.adminHeldStt.value = heldAmountStt(user);
+  els.adminHoldingDays.value = holdingDays(user);
+  els.adminStakedStt.value = stakedAmountStt(user);
+  els.adminStakingDays.value = stakingDays(user);
+  els.adminTierOverride.value = user.adminTierOverride || "";
+  els.adminActiveDaysOverride.value = user.adminActiveDaysOverride ?? "";
   els.adminOverride.value = round.resultOverride || "";
   els.adminCutoffTime.value = toDatetimeLocalValue(round.predictionCutoffTime);
   els.adminSettlementTime.value = toDatetimeLocalValue(round.settlementTime);
@@ -1670,12 +2265,16 @@ function saveRoundFromAdmin(showSavedToast = true) {
   const user = getUser();
   const nextSparkBalance = Math.max(0, Math.floor(Number(els.adminSparkBalance.value || user.sparkBalance)));
   const sparkBalanceDelta = nextSparkBalance - user.sparkBalance;
+  const nextUsername = els.adminUsername.value.trim();
+  const nextHeldStt = Math.max(0, Number(els.adminHeldStt.value || 0));
+  const nextHoldingDays = Math.max(0, Math.floor(Number(els.adminHoldingDays.value || 0)));
+  const nextStakedStt = Math.max(0, Number(els.adminStakedStt.value || 0));
+  const nextStakingDays = Math.max(0, Math.floor(Number(els.adminStakingDays.value || 0)));
+  const activeDaysOverrideValue = els.adminActiveDaysOverride.value;
 
   round.openingPrice = Number(els.adminOpeningPrice.value);
   round.currentPrice = Number(els.adminCurrentPrice.value);
   round.closingPrice = els.adminClosingPrice.value ? Number(els.adminClosingPrice.value) : null;
-  round.rewardPoolCents = Math.round(Number(els.adminRewardPool.value || 0) * 100);
-  round.maxWinners = Math.max(0, Math.floor(Number(els.adminMaxWinners.value || 0)));
   round.status = els.adminStatus.value;
   round.resultOverride = els.adminOverride.value;
   round.predictionCutoffTime = fromDatetimeLocalValue(els.adminCutoffTime.value) || round.predictionCutoffTime;
@@ -1686,12 +2285,64 @@ function saveRoundFromAdmin(showSavedToast = true) {
     applySparkChange(sparkBalanceDelta, "admin-adjust", "Admin Spark balance adjustment", round.id);
   }
 
+  user.username = nextUsername;
+  if (nextUsername && !user.profileSetAt) {
+    user.profileSetAt = new Date().toISOString();
+  }
+  if (nextUsername) {
+    awardMissionOnce("profileRewarded", "setProfile", "Mission: set profile username", null);
+  }
+
+  user.holdings = {
+    amountStt: nextHeldStt,
+    since: nextHeldStt > 0 ? isoDaysAgo(nextHoldingDays) : null
+  };
+
+  if (nextStakedStt > 0) {
+    const stakedAt = isoDaysAgo(nextStakingDays);
+    user.stake = {
+      active: true,
+      amountStt: nextStakedStt,
+      stakedAt,
+      unlockAt: new Date(new Date(stakedAt).getTime() + GAME_RULES.stakeLockDays * 86400000).toISOString(),
+      adminManaged: true
+    };
+  } else if (user.stake?.active) {
+    user.stake = null;
+    pulseState.user = {
+      ...user,
+      stake: null
+    };
+  }
+
+  user.adminTierOverride = els.adminTierOverride.value;
+  user.adminActiveDaysOverride = activeDaysOverrideValue === ""
+    ? null
+    : Math.max(0, Math.floor(Number(activeDaysOverrideValue || 0)));
+
+  refreshCampaignMissions();
+  syncLivePredictionMultiplierForRound(round);
+
   saveState();
   render();
 
   if (showSavedToast) {
     showToast(sparkBalanceDelta !== 0 ? `Round saved. Spark balance set to ${nextSparkBalance}.` : "Round settings saved.");
   }
+}
+
+function syncLivePredictionMultiplierForRound(round) {
+  const prediction = currentWalletPrediction(round);
+  if (!prediction || round.status === "settled") {
+    return;
+  }
+
+  const snapshot = multiplierSnapshotForRound(round);
+  prediction.tierId = snapshot.tierId;
+  prediction.tierMultiplier = snapshot.tierMultiplier;
+  prediction.activeStreakDays = snapshot.activeStreakDays;
+  prediction.streakMultiplier = snapshot.streakMultiplier;
+  prediction.updatedAt = new Date().toISOString();
 }
 
 function betAmountFromInput() {
@@ -1725,7 +2376,7 @@ function submitPrediction(side) {
   }
 
   if (status !== "open") {
-    showToast(`Guessing is closed because the trading day is ${status}.`);
+    showToast(`Forecasting is closed because the trading day is ${status}.`);
     return;
   }
 
@@ -1747,7 +2398,7 @@ function submitPrediction(side) {
 
     const difference = amountSparks - Number(existingPrediction.amountSparks || 0);
     if (difference > 0 && getUser().sparkBalance < difference) {
-      showToast("Not enough Sparks to increase this guess.");
+      showToast("Not enough Sparks to increase this forecast.");
       return;
     }
 
@@ -1761,7 +2412,7 @@ function submitPrediction(side) {
   }
 
   if (getUser().sparkBalance < amountSparks) {
-    showToast("Not enough Sparks for this guess.");
+    showToast("Not enough Sparks for this forecast.");
     return;
   }
 
@@ -1777,10 +2428,12 @@ function openGuessConfirmation(intent) {
   pendingGuess = intent;
 
   els.guessConfirmText.textContent = intent.mode === "edit"
-    ? `Are you sure you want to change your guess to "${intent.side}" with ${intent.amountSparks} Sparks?`
-    : `Are you sure you want to bet ${intent.amountSparks} Sparks on "${intent.side}"?`;
-  els.guessConfirmMode.textContent = currentModeLabel();
-  els.guessConfirmModeMeta.textContent = currentModeMeta();
+    ? "This updates your one allowed forecast edit. Only the latest forecast will settle."
+    : `This will use ${intent.amountSparks} Sparks from your balance.`;
+  els.guessConfirmSide.textContent = intent.side;
+  els.guessConfirmAmount.textContent = formatSparkAmount(intent.amountSparks);
+  els.guessConfirmMode.textContent = currentTierLabel();
+  els.guessConfirmModeMeta.textContent = currentTierMeta();
   els.guessConfirmModal.classList.add("is-visible");
   els.guessConfirmModal.setAttribute("aria-hidden", "false");
   els.confirmGuessButton.focus();
@@ -1800,7 +2453,7 @@ function confirmPendingGuess() {
   const round = pulseState.rounds.find((item) => item.id === pendingGuess.roundId);
   if (!round || effectiveStatus(round) !== "open") {
     closeGuessConfirmation();
-    showToast("Guessing is no longer open.");
+    showToast("Forecasting is no longer open.");
     return;
   }
 
@@ -1818,12 +2471,13 @@ function confirmPendingGuess() {
     return;
   }
 
-  showToast("This guess has already changed. Review it and try again.");
+  showToast("This forecast has already changed. Review it and try again.");
 }
 
 function commitNewPrediction(round, side, amountSparks) {
   const now = new Date().toISOString();
-  applySparkChange(-amountSparks, "bet", `Daily guess: ${side}`, round.id);
+  const multiplierSnapshot = multiplierSnapshotForRound(round);
+  applySparkChange(-amountSparks, "bet", `Daily forecast: ${side}`, round.id);
   pulseState.predictions.push({
     id: `PR-${round.id}-${DEMO_WALLET.slice(-6)}-${Date.now()}`,
     roundId: round.id,
@@ -1831,7 +2485,10 @@ function commitNewPrediction(round, side, amountSparks) {
     side,
     amountSparks,
     mode: isUserStaked() ? "real" : "paper",
-    stakingMultiplier: isUserStaked() ? GAME_RULES.stakeWinMultiplier : 1,
+    tierId: multiplierSnapshot.tierId,
+    tierMultiplier: multiplierSnapshot.tierMultiplier,
+    activeStreakDays: multiplierSnapshot.activeStreakDays,
+    streakMultiplier: multiplierSnapshot.streakMultiplier,
     createdAt: now,
     updatedAt: now,
     editCount: 0,
@@ -1842,16 +2499,16 @@ function commitNewPrediction(round, side, amountSparks) {
       mode: isUserStaked() ? "real" : "paper",
       createdAt: now
     }],
-    priorWinStreak: calculatePriorWinStreak(DEMO_WALLET, round.roundDate),
     score: null,
     result: null
   });
 
-  awardFiveDayMissionIfEarned();
+  awardDailySubmitMission(round);
+  awardWeeklyForecastMissionsIfEarned();
   saveState();
   launchPredictionCelebration(side, side === "UP" ? els.predictUpButton : els.predictDownButton);
   render();
-  showToast(`Guess submitted: ${side} for ${amountSparks} Sparks.`);
+  showToast(`Forecast submitted: ${side} for ${amountSparks} Sparks.`);
 }
 
 function editPrediction(prediction, round, side, amountSparks) {
@@ -1862,19 +2519,23 @@ function editPrediction(prediction, round, side, amountSparks) {
 
   const difference = amountSparks - Number(prediction.amountSparks || 0);
   if (difference > 0 && getUser().sparkBalance < difference) {
-    showToast("Not enough Sparks to increase this guess.");
+    showToast("Not enough Sparks to increase this forecast.");
     return;
   }
 
   if (difference !== 0) {
-    applySparkChange(-difference, difference > 0 ? "bet-increase" : "bet-refund", difference > 0 ? "Increased daily guess" : "Reduced daily guess", round.id);
+    applySparkChange(-difference, difference > 0 ? "bet-increase" : "bet-refund", difference > 0 ? "Increased daily forecast" : "Reduced daily forecast", round.id);
   }
 
   const now = new Date().toISOString();
+  const multiplierSnapshot = multiplierSnapshotForRound(round);
   prediction.side = side;
   prediction.amountSparks = amountSparks;
   prediction.mode = isUserStaked() ? "real" : "paper";
-  prediction.stakingMultiplier = isUserStaked() ? GAME_RULES.stakeWinMultiplier : 1;
+  prediction.tierId = multiplierSnapshot.tierId;
+  prediction.tierMultiplier = multiplierSnapshot.tierMultiplier;
+  prediction.activeStreakDays = multiplierSnapshot.activeStreakDays;
+  prediction.streakMultiplier = multiplierSnapshot.streakMultiplier;
   prediction.editCount = Number(prediction.editCount || 0) + 1;
   prediction.updatedAt = now;
   prediction.history = [
@@ -1891,7 +2552,7 @@ function editPrediction(prediction, round, side, amountSparks) {
   saveState();
   launchPredictionCelebration(side, side === "UP" ? els.predictUpButton : els.predictDownButton);
   render();
-  showToast(`Guess updated: ${side} for ${amountSparks} Sparks.`);
+  showToast(`Forecast updated: ${side} for ${amountSparks} Sparks.`);
 }
 
 function settleActiveRound() {
@@ -1964,13 +2625,9 @@ function settleWalletSparkLedger(round, winningSide) {
   }
 
   const outcome = calculatePredictionOutcome(prediction, round);
-  applySparkChange(outcome.returnedStake + outcome.sparkProfit, "win", `Winning guess payout at ${formatMultiplier(outcome.finalMultiplier)}`, round.id);
+  applySparkChange(outcome.returnedStake + outcome.sparkProfit, "win", `Winning forecast payout at ${formatMultiplier(outcome.finalMultiplier)}`, round.id);
   prediction.settledLedgerApplied = true;
-
-  if (!getUser().missions.firstWinRewarded) {
-    getUser().missions.firstWinRewarded = true;
-    applySparkChange(GAME_RULES.missionRewards.firstWinningGuess, "mission", "Mission: first winning guess of the day", round.id);
-  }
+  awardDailyCorrectMission(round);
 }
 
 function calculateScoreWithSide(prediction, round, winningSide) {
@@ -2038,59 +2695,32 @@ function markActiveRewards(status) {
   showToast(changed ? `${changed} reward(s) marked ${status}.` : "No rewards for the active round.");
 }
 
-function awardFiveDayMissionIfEarned() {
-  const user = getUser();
-  const userRoundDates = new Set(
-    pulseState.predictions
-      .filter((prediction) => prediction.wallet === DEMO_WALLET)
-      .map((prediction) => pulseState.rounds.find((round) => round.id === prediction.roundId)?.roundDate)
-      .filter(Boolean)
-  );
-  const weekKeys = new Set(Array.from(userRoundDates).map(weekKeyForDateKey));
-
-  for (const weekKey of weekKeys) {
-    if (user.missions.fiveDayWeeks.includes(weekKey)) {
-      continue;
-    }
-
-    const days = Array.from({ length: 5 }, (_, index) => addDateKey(weekKey, index));
-    const completed = days.every((dateKey) => userRoundDates.has(dateKey));
-    if (completed) {
-      user.missions.fiveDayWeeks.push(weekKey);
-      applySparkChange(GAME_RULES.missionRewards.fiveDayWeek, "mission", "Mission: 5 consecutive trading-day guesses", null);
-    }
-  }
-}
-
-function stakeStt() {
+function stakeStt(amountStt = GAME_RULES.minStakeStt) {
   if (!walletConnected) {
     showToast("Connect the wallet first.");
     return;
   }
 
   if (isUserStaked()) {
-    showToast("1 STT is already staked.");
+    showToast(`${formatSttAmount(stakedAmountStt())} is already staked.`);
     return;
   }
 
+  const stakeAmount = normalizeStakeAmount(amountStt);
   const now = new Date();
   const unlockAt = new Date(now.getTime() + GAME_RULES.stakeLockDays * 86400000);
   const user = getUser();
   user.stake = {
     active: true,
-    amountStt: GAME_RULES.sttStakeAmount,
+    amountStt: stakeAmount,
     stakedAt: now.toISOString(),
     unlockAt: unlockAt.toISOString()
   };
 
-  if (!user.missions.stakeRewarded) {
-    user.missions.stakeRewarded = true;
-    applySparkChange(GAME_RULES.missionRewards.stakeStt, "mission", "Mission: stake 1 STT", null);
-  }
-
+  syncLivePredictionMultiplierForRound(getActiveRound());
   saveState();
   render();
-  showToast("1 STT staked. Trading Mode unlocked.");
+  showToast(`${formatSttAmount(stakeAmount)} staked. Tier qualification and weekly stake mission require 7 maintained days.`);
 }
 
 function unstakeStt() {
@@ -2101,52 +2731,15 @@ function unstakeStt() {
     return;
   }
 
-  if (new Date(user.stake.unlockAt).getTime() > Date.now()) {
-    showToast("Stake is locked for one week.");
-    return;
-  }
-
-  user.stake = {
-    ...user.stake,
-    active: false,
-    unstakedAt: new Date().toISOString()
+  user.stake = null;
+  pulseState.user = {
+    ...user,
+    stake: null
   };
+  syncLivePredictionMultiplierForRound(getActiveRound());
   saveState();
   render();
-  showToast("STT unstaked. Paper Mode active.");
-}
-
-function redeemSparks() {
-  const user = getUser();
-
-  if (!isUserStaked()) {
-    showToast("Stake 1 STT to unlock redemption.");
-    return;
-  }
-
-  if (user.sparkBalance < GAME_RULES.sparksPerUsdt) {
-    showToast(`You need ${GAME_RULES.sparksPerUsdt.toLocaleString("en-US")} Sparks to redeem 1 USDT.`);
-    return;
-  }
-
-  applySparkChange(-GAME_RULES.sparksPerUsdt, "redeem", "Redeemed 1 USDT demo record", null);
-  user.redemptions.push({
-    id: `RD-${Date.now()}`,
-    amountSparks: GAME_RULES.sparksPerUsdt,
-    amountUsdt: 1,
-    status: "demo-pending",
-    createdAt: new Date().toISOString()
-  });
-  saveState();
-  render();
-  showToast("Redemption record created: 1 USDT.");
-}
-
-function estimatedAnnualizedYieldPercent() {
-  const dailyBonusSparks = GAME_RULES.maxDailyBetSparks * 0.25;
-  const dailyBonusUsdt = dailyBonusSparks / GAME_RULES.sparksPerUsdt;
-  const annualValueUsdt = dailyBonusUsdt * GAME_RULES.tradingDaysPerYear;
-  return annualValueUsdt / GAME_RULES.sttReferenceUsdt * 100;
+  showToast("STT unstaked. Tier updated.");
 }
 
 function renderCountdown(round) {
@@ -2183,20 +2776,54 @@ function handleProfileAction(event) {
     stakeStt();
   } else if (action === "unstake") {
     unstakeStt();
-  } else if (action === "redeem") {
-    redeemSparks();
   }
+}
+
+function handleProfileSubmit(event) {
+  const profileForm = event.target.closest("[data-profile-form]");
+  const stakeForm = event.target.closest("[data-stake-form]");
+  if (!profileForm && !stakeForm) {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (stakeForm) {
+    const amount = stakeForm.querySelector("[name='amountStt']")?.value;
+    stakeStt(amount);
+    return;
+  }
+
+  const username = profileForm.querySelector("[name='username']")?.value.trim() || "";
+  if (!username) {
+    showToast("Enter a username first.");
+    return;
+  }
+
+  const user = getUser();
+  user.username = username;
+  user.profileSetAt = user.profileSetAt || new Date().toISOString();
+  const rewarded = awardMissionOnce("profileRewarded", "setProfile", "Mission: set profile username", null);
+  saveState();
+  render();
+  showToast(rewarded ? `Profile saved. +${formatSparkAmount(GAME_RULES.missionRewards.setProfile)} mission complete.` : "Profile saved.");
 }
 
 function wireEvents() {
   els.walletButton.addEventListener("click", () => {
     walletConnected = !walletConnected;
     localStorage.setItem(PULSE_WALLET_KEY, String(walletConnected));
+    let walletMissionRewarded = false;
     if (walletConnected) {
-      ensureDailySparkGrant(true);
+      walletMissionRewarded = ensureConnectWalletMission(false);
+      ensureDailySparkGrant(false);
     }
     render();
-    showToast(walletConnected ? "Wallet connected. Paper Mode active." : "Wallet disconnected.");
+    showToast(walletConnected
+      ? walletMissionRewarded
+        ? `Wallet connected. +${formatSparkAmount(GAME_RULES.missionRewards.connectWallet)} mission complete.`
+        : "Wallet connected."
+      : "Wallet disconnected.");
   });
 
   els.predictUpButton.addEventListener("click", () => submitPrediction("UP"));
@@ -2241,6 +2868,7 @@ function wireEvents() {
     }
   });
   els.profilePanel.addEventListener("click", handleProfileAction);
+  els.profilePanel.addEventListener("submit", handleProfileSubmit);
   els.monthlySilverChart.addEventListener("pointermove", updateMonthlyChartHover);
   els.monthlySilverChart.addEventListener("pointerleave", hideMonthlyChartHover);
   els.monthlySilverChart.addEventListener("mousemove", updateMonthlyChartHover);
@@ -2252,7 +2880,7 @@ function wireEvents() {
     pulseState = createDefaultState();
     saveState();
     render();
-    showToast("Silver Pulse demo data reset.");
+    showToast("Silver Forecast demo data reset.");
   });
 
   window.addEventListener("focus", () => renderCountdown(getActiveRound()));

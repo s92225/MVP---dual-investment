@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Silver Pulse Daily Prediction</title>
-    <link rel="stylesheet" href="styles.css?v=20260521-rate-bonus">
+    <title>Silver Forecast</title>
+    <link rel="stylesheet" href="styles.css?v=20260528-tier-rules-5">
   </head>
   <body class="silver-pulse-page">
     <header class="topbar" aria-label="Primary">
@@ -13,7 +13,7 @@
       </a>
       <nav class="navlinks" aria-label="Sections">
         <a href="index.html#dashboard">Earn</a>
-        <a href="#play">Silver Pulse</a>
+        <a href="#play">Silver Forecast</a>
         <a href="range-prediction.html">Range Prediction</a>
         <a href="#profile">My Activity</a>
         <a href="#admin">Admin</a>
@@ -32,10 +32,10 @@
           </div>
           <h1 id="pulseTitle">Will silver close UP or DOWN today?</h1>
           <p class="pulse-hero-text">
-            Submit a daily silver guess with Sparks. Stake 1 STT to unlock the 1.5x Trading Mode win multiplier and an estimated 4% annualized Spark earning yield.
+            Submit a daily silver forecast with Sparks. Stake from 0.1 STT to climb tiers.
           </p>
           <div class="hero-actions">
-            <a class="primary-button" href="#round">Submit Prediction</a>
+            <a class="primary-button" href="#round">Submit Forecast</a>
             <a class="ghost-button" href="#leaderboard">View Leaderboard</a>
           </div>
         </div>
@@ -45,19 +45,16 @@
             <strong id="heroRewardPool">10 Sparks</strong>
             <small>profile ledger</small>
           </div>
-          <div class="orbital-card">
-            <span>Stake Yield</span>
-            <strong id="heroMaxWinners">4%</strong>
-            <small>estimated annualized</small>
-          </div>
         </div>
       </section>
 
       <section id="round" class="workspace" aria-labelledby="roundTitle">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Daily Silver Prediction</p>
-            <h2 id="roundTitle">Today&apos;s Round</h2>
+            <div class="round-title-row">
+              <h2 id="roundTitle">Today&apos;s Round</h2>
+              <span id="roundStatusPill" class="status-pill">Open</span>
+            </div>
           </div>
           <div class="heading-actions">
             <div id="pulseSpotInline" class="spot-inline" aria-live="polite">
@@ -72,15 +69,7 @@
         </div>
 
         <div class="product-grid pulse-round-grid">
-          <section class="product-list-shell" aria-labelledby="predictionTitle">
-            <div class="panel-title-row">
-              <div>
-                <p class="eyebrow">Active Challenge</p>
-                <h3 id="predictionTitle">Daily Forecast</h3>
-              </div>
-              <span id="roundStatusPill" class="status-pill">Open</span>
-            </div>
-
+          <section class="product-list-shell" aria-label="Forecast entry">
             <div class="pulse-play-panel">
               <div class="pulse-question-card">
                 <span class="metric-label">Today&apos;s question</span>
@@ -91,18 +80,18 @@
 
               <div class="spark-bet-panel" aria-labelledby="sparkBetTitle">
                 <div class="spark-bet-copy">
-                  <span class="metric-label" id="sparkBetTitle">Bet amount</span>
+                  <span class="metric-label" id="sparkBetTitle">Forecast amount</span>
                   <strong><span id="betAmountDisplay">10</span> Sparks</strong>
                   <p id="betLimitText" class="summary-text">10 Sparks minimum, 100 Sparks daily max.</p>
                 </div>
                 <div class="spark-bet-controls">
                   <div class="spark-stepper">
-                    <button class="ghost-button compact" type="button" data-bet-adjust="-10" aria-label="Decrease bet by 10 Sparks">-</button>
+                    <button class="ghost-button compact" type="button" data-bet-adjust="-10" aria-label="Decrease forecast by 10 Sparks">-</button>
                     <label for="sparkBetAmount">
                       <span class="sr-only">Spark amount</span>
                       <input id="sparkBetAmount" type="number" inputmode="numeric" min="10" max="100" step="10" value="10">
                     </label>
-                    <button class="ghost-button compact" type="button" data-bet-adjust="10" aria-label="Increase bet by 10 Sparks">+</button>
+                    <button class="ghost-button compact" type="button" data-bet-adjust="10" aria-label="Increase forecast by 10 Sparks">+</button>
                   </div>
                   <div class="bet-chip-row" aria-label="Quick Spark amounts">
                     <button type="button" data-bet-amount="10">10</button>
@@ -113,7 +102,7 @@
                 </div>
               </div>
 
-              <div class="prediction-actions" role="group" aria-label="Prediction choice">
+              <div class="prediction-actions" role="group" aria-label="Forecast choice">
                 <button id="predictUpButton" class="pulse-choice pulse-choice-up" type="button" data-side="UP">
                   <span>Predict above target</span>
                   <strong>UP</strong>
@@ -128,15 +117,25 @@
               <div id="userPredictionStatus" class="scenario-result pulse-status-line" aria-live="polite"></div>
 
               <details class="terms-toggle pulse-rules-toggle">
-                <summary>Rules and T&amp;C</summary>
+                <summary>Full Rules and T&amp;C</summary>
                 <div class="terms-content">
-                  <ul>
-                    <li>Play with Sparks in Paper Mode. Stake 1 STT for Trading Mode, 1.5x wins, and redemption.</li>
-                    <li>Bet 10-100 Sparks per trading day. You can edit the latest guess once before 10:00 AM HKT.</li>
-                    <li>Correct guesses return the bet plus profit. Wrong guesses lose the bet. The higher active bonus is used and final multiplier is capped at 1.5x.</li>
-                    <li>Get 10 free Sparks daily while balance is 100 or below. Staked users can redeem 2,000 Sparks = 1 USDT.</li>
-                    <li>The 4% yield is an estimate using 50% win rate, max daily play, 1 STT = 75 USDT, 2,000 Sparks = 1 USDT, and 260 trading days.</li>
-                  </ul>
+                  <h4>Full Rules</h4>
+                  <p>Everything participants need to know before joining Silver Sparks Season 1.</p>
+                  <ol class="rules-grid">
+                    <li><strong>Join with your wallet:</strong> Connect a wallet to enter the campaign. No KYC is required to join, earn Sparks, appear on the leaderboard, or enter the raffle.</li>
+                    <li><strong>What counts as activity:</strong> A wallet is active when it completes at least one qualifying interaction inside the STT ecosystem. For Season 1, qualifying interactions are STT Earn and Silver Forecast.</li>
+                    <li><strong>Earn Silver Sparks:</strong> Complete campaign actions such as Daily Forecasts, weekly missions, STT holding, STT staking, and eligible referrals.</li>
+                    <li><strong>Sparks are campaign points only:</strong> Sparks are non-transferable and do not have a fixed cash value. Rewards are paid only from the official Season 1 reward pools.</li>
+                    <li><strong>Leaderboard is open, rewards are gated:</strong> All active wallets can appear on the leaderboard. However, only wallets that hold or stake at least 0.1 STT before the final campaign snapshot can receive rewards from the Leaderboard Pool.</li>
+                    <li><strong>Raffle tickets are automatic:</strong> Each participating wallet receives 1 raffle ticket automatically. Every 100 Sparks = 1 additional raffle ticket.</li>
+                    <li><strong>Free users can win raffle rewards:</strong> Users below the 0.1 STT holding or staking threshold can still join, earn Sparks, appear on the leaderboard, and enter the raffle. They are eligible for the Raffle Pool only.</li>
+                    <li><strong>Holder and staker tiers:</strong> Higher STT holding or staking levels unlock better campaign multipliers. Tier eligibility requires the required STT balance or staked amount to be maintained for the required period.</li>
+                    <li><strong>Multiplier cap:</strong> Final Sparks are calculated using campaign multipliers, but the total multiplier is capped at 2.4x.</li>
+                    <li><strong>Fair play rule:</strong> Bots, duplicate-wallet farming, fake referrals, coordinated abuse, or abnormal activity may lead to disqualification. The team may review suspicious wallets before rewards are finalized.</li>
+                    <li><strong>Final snapshot and rewards:</strong> At the end of the campaign, the leaderboard will be frozen, raffle tickets finalized, winners reviewed, and rewards distributed according to the official campaign results.</li>
+                    <li><strong>Product rules remain separate:</strong> Campaign rules are separate from STT minting, redemption, custody, and other product terms. STT product activity remains subject to applicable SilverTimes platform rules.</li>
+                  </ol>
+                  <p class="rules-note">Season 1 rewards are limited to the fixed campaign pool. Silver Sparks do not represent STT, silver, cash, or any guaranteed redemption value.</p>
                 </div>
               </details>
 
@@ -179,7 +178,7 @@
           <aside class="detail-panel" aria-labelledby="roundDetailTitle">
             <div class="detail-stack">
               <div class="detail-header">
-                <h3 id="roundDetailTitle">Potential Spark Profit</h3>
+                <h3 id="roundDetailTitle">Potential Reward</h3>
               </div>
               <div class="scenario-chart score-preview-card">
                 <div class="chart-header">
@@ -188,12 +187,20 @@
                 </div>
                 <div class="score-stack">
                   <div class="score-row">
-                    <span>Bet amount</span>
+                    <span>Forecast amount</span>
                     <strong id="basePointValue">100</strong>
                   </div>
                   <div class="score-row score-bonus-row">
-                    <span id="bonusLabelValue">Streak bonus</span>
-                    <strong><span id="bonusMultiplierValue">1.0x</span> <small id="bonusMetaValue">0 prior wins</small></strong>
+                    <span id="bonusLabelValue">Tier multiplier</span>
+                    <strong class="tier-score-value"><small id="bonusMetaValue" class="tier-mini-meta">Spark</small> <span id="bonusMultiplierValue">1.0x</span></strong>
+                  </div>
+                  <div class="score-row score-bonus-row">
+                    <span>Active streak</span>
+                    <strong><span id="streakMultiplierValue">1.0x</span> <small id="streakMetaValue">0 active days</small></strong>
+                  </div>
+                  <div class="score-row score-total-row">
+                    <span>Total multiplier</span>
+                    <strong id="finalMultiplierValue">1.0x</strong>
                   </div>
                 </div>
               </div>
@@ -204,31 +211,38 @@
       </section>
 
       <section id="leaderboard" class="workspace leaderboard-workspace" aria-labelledby="leaderboardTitle">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Daily Ranking</p>
-            <h2 id="leaderboardTitle">Leaderboard</h2>
-          </div>
-          <div class="leaderboard-actions">
-            <p id="leaderboardSummary" class="summary-text">Select a settled week to view winners.</p>
-            <label class="week-select-label" for="leaderboardWeekSelect">
-              Week
-              <select id="leaderboardWeekSelect"></select>
-            </label>
-          </div>
-        </div>
-        <div id="leaderboardPanel" class="positions-list pulse-table-shell leaderboard-shell" aria-live="polite"></div>
+        <details class="section-collapse leaderboard-collapse">
+          <summary class="section-heading collapse-heading">
+            <div>
+              <p class="eyebrow">All-Time Ranking</p>
+              <h2 id="leaderboardTitle">Leaderboard</h2>
+            </div>
+            <div class="leaderboard-actions">
+              <span id="leaderboardSummary" class="scope-pill">All time</span>
+              <label class="week-select-label sr-only" for="leaderboardWeekSelect">
+                Week
+                <select id="leaderboardWeekSelect" tabindex="-1"></select>
+              </label>
+            </div>
+          </summary>
+          <div id="leaderboardPanel" class="positions-list pulse-table-shell leaderboard-shell" aria-live="polite"></div>
+        </details>
       </section>
 
       <section id="history" class="workspace" aria-labelledby="historyTitle">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Trading Days Only</p>
-            <h2 id="historyTitle">Round History</h2>
+        <details class="section-collapse history-collapse">
+          <summary class="section-heading collapse-heading">
+            <div>
+              <p class="eyebrow">Trading Days Only</p>
+              <h2 id="historyTitle">Round History</h2>
+            </div>
+            <span class="scope-pill">Expand</span>
+          </summary>
+          <div class="collapse-description">
+            <p class="summary-text">Trading days use Hong Kong time for this MVP.</p>
           </div>
-          <p class="summary-text">Trading days use Hong Kong time for this MVP.</p>
-        </div>
-        <div id="roundHistoryPanel" class="positions-list pulse-table-shell history-shell" aria-live="polite"></div>
+          <div id="roundHistoryPanel" class="positions-list pulse-table-shell history-shell" aria-live="polite"></div>
+        </details>
       </section>
 
       <section id="profile" class="workspace" aria-labelledby="profileTitle">
@@ -252,58 +266,109 @@
         </div>
 
         <form id="pulseAdminForm" class="admin-form pulse-admin-form">
-          <div class="field">
-            <label for="adminOpeningPrice">Opening Reference</label>
-            <input id="adminOpeningPrice" type="text" inputmode="decimal">
-          </div>
-          <div class="field">
-            <label for="adminCurrentPrice">Silver Spot Price</label>
-            <input id="adminCurrentPrice" type="text" inputmode="decimal">
-          </div>
-          <div class="field">
-            <label for="adminClosingPrice">Closing Reference</label>
-            <input id="adminClosingPrice" type="text" inputmode="decimal">
-          </div>
-          <div class="field">
-            <label for="adminRewardPool">Legacy Pool (USDT)</label>
-            <input id="adminRewardPool" type="text" inputmode="decimal">
-          </div>
-          <div class="field">
-            <label for="adminMaxWinners">Legacy Winner Cap</label>
-            <input id="adminMaxWinners" type="text" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label for="adminStatus">Status</label>
-            <select id="adminStatus">
-              <option value="upcoming">upcoming</option>
-              <option value="open">open</option>
-              <option value="locked">locked</option>
-              <option value="settled">settled</option>
-              <option value="cancelled">cancelled</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="adminSparkBalance">Demo Spark Balance</label>
-            <input id="adminSparkBalance" type="number" inputmode="numeric" min="0" step="1">
-          </div>
-          <div class="field">
-            <label for="adminOverride">Result Override</label>
-            <select id="adminOverride">
-              <option value="">Auto from price</option>
-              <option value="UP">UP</option>
-              <option value="DOWN">DOWN</option>
-              <option value="FLAT">FLAT</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="adminCutoffTime">Prediction Cutoff</label>
-            <input id="adminCutoffTime" type="datetime-local">
-          </div>
-          <div class="field">
-            <label for="adminSettlementTime">Settlement Time</label>
-            <input id="adminSettlementTime" type="datetime-local">
-          </div>
-          <button class="ghost-button" type="submit">Save Round</button>
+          <fieldset class="admin-group">
+            <legend>Round Prices</legend>
+            <div class="admin-group-fields">
+              <div class="field">
+                <label for="adminOpeningPrice">Opening Reference</label>
+                <input id="adminOpeningPrice" type="text" inputmode="decimal">
+              </div>
+              <div class="field">
+                <label for="adminCurrentPrice">Silver Spot Price</label>
+                <input id="adminCurrentPrice" type="text" inputmode="decimal">
+              </div>
+              <div class="field">
+                <label for="adminClosingPrice">Closing Reference</label>
+                <input id="adminClosingPrice" type="text" inputmode="decimal">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="admin-group">
+            <legend>Round Status</legend>
+            <div class="admin-group-fields">
+              <div class="field">
+                <label for="adminStatus">Status</label>
+                <select id="adminStatus">
+                  <option value="upcoming">upcoming</option>
+                  <option value="open">open</option>
+                  <option value="locked">locked</option>
+                  <option value="settled">settled</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="adminOverride">Result Override</label>
+                <select id="adminOverride">
+                  <option value="">Auto from price</option>
+                  <option value="UP">UP</option>
+                  <option value="DOWN">DOWN</option>
+                  <option value="FLAT">FLAT</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="adminCutoffTime">Forecast Cutoff</label>
+                <input id="adminCutoffTime" type="datetime-local">
+              </div>
+              <div class="field">
+                <label for="adminSettlementTime">Settlement Time</label>
+                <input id="adminSettlementTime" type="datetime-local">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="admin-group">
+            <legend>Wallet And STT Testing</legend>
+            <div class="admin-group-fields">
+              <div class="field">
+                <label for="adminSparkBalance">Demo Spark Balance</label>
+                <input id="adminSparkBalance" type="number" inputmode="numeric" min="0" step="1">
+              </div>
+              <div class="field">
+                <label for="adminUsername">Profile Username</label>
+                <input id="adminUsername" type="text" maxlength="24">
+              </div>
+              <div class="field">
+                <label for="adminHeldStt">Held STT</label>
+                <input id="adminHeldStt" type="number" inputmode="decimal" min="0" step="0.1">
+              </div>
+              <div class="field">
+                <label for="adminHoldingDays">Holding Days</label>
+                <input id="adminHoldingDays" type="number" inputmode="numeric" min="0" step="1">
+              </div>
+              <div class="field">
+                <label for="adminStakedStt">Staked STT</label>
+                <input id="adminStakedStt" type="number" inputmode="decimal" min="0" step="0.1">
+              </div>
+              <div class="field">
+                <label for="adminStakingDays">Staking Days</label>
+                <input id="adminStakingDays" type="number" inputmode="numeric" min="0" step="1">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="admin-group">
+            <legend>Multiplier Testing</legend>
+            <div class="admin-group-fields">
+              <div class="field">
+                <label for="adminTierOverride">Tier Override</label>
+                <select id="adminTierOverride">
+                  <option value="">Auto from STT</option>
+                  <option value="spark">Spark 1.0x</option>
+                  <option value="flare">Flare 1.1x</option>
+                  <option value="blaze">Blaze 1.25x</option>
+                  <option value="nova">Nova 1.5x</option>
+                  <option value="apex">Apex 2.0x</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="adminActiveDaysOverride">Active Days Override</label>
+                <input id="adminActiveDaysOverride" type="number" inputmode="numeric" min="0" step="1" placeholder="Auto">
+              </div>
+            </div>
+          </fieldset>
+
+          <button class="ghost-button admin-save-button" type="submit">Save Settings</button>
         </form>
 
         <div class="admin-actions">
@@ -316,23 +381,33 @@
 
     <div id="guessConfirmModal" class="modal-backdrop" aria-hidden="true">
       <div class="guess-confirm-card" role="dialog" aria-modal="true" aria-labelledby="guessConfirmTitle">
-        <span class="metric-label">Confirm guess</span>
-        <h3 id="guessConfirmTitle">Confirm your Spark bet</h3>
-        <p id="guessConfirmText">Are you sure you want to bet 10 Sparks on UP?</p>
-        <div class="confirm-summary pulse-confirm-summary">
-          <span class="confirm-summary-label">Paper / Trading Mode</span>
-          <strong id="guessConfirmMode">Paper Mode</strong>
-          <small id="guessConfirmModeMeta">Demo Sparks only</small>
+        <span class="metric-label">Confirm forecast</span>
+        <h3 id="guessConfirmTitle">Confirm Spark forecast</h3>
+        <p id="guessConfirmText">This will use 10 Sparks from your balance.</p>
+        <div class="guess-ticket">
+          <div>
+            <span>Side</span>
+            <strong id="guessConfirmSide">UP</strong>
+          </div>
+          <div>
+            <span>Amount</span>
+            <strong id="guessConfirmAmount">10 Sparks</strong>
+          </div>
+          <div class="guess-ticket-mode">
+            <span>Tier</span>
+            <strong id="guessConfirmMode">Spark 1.0x</strong>
+            <small id="guessConfirmModeMeta">Campaign scoring tier</small>
+          </div>
         </div>
         <div class="confirm-actions">
           <button id="cancelGuessButton" class="ghost-button" type="button">Cancel</button>
-          <button id="confirmGuessButton" class="primary-button" type="button">Confirm Bet</button>
+          <button id="confirmGuessButton" class="primary-button" type="button">Confirm Forecast</button>
         </div>
       </div>
     </div>
 
     <div id="pulseToast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="silver-pulse.js?v=20260521-rate-bonus"></script>
+    <script src="silver-pulse.js?v=20260528-tier-rules-5"></script>
   </body>
 </html>
